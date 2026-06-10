@@ -16,6 +16,11 @@
  * Once those agents land their real modules, this file becomes
  * redundant — TypeScript will prefer the real declaration. Until
  * then, this is the contract.
+ *
+ * Note: as of the integration phase, both real modules now exist in
+ * `src/lib/rag/embed.ts` and `src/lib/vector/index.ts`. The ambient
+ * declarations are kept here only as a safety net for any straggling
+ * references; they match the real module's public shape.
  * ----------------------------------------------------------------------------
  */
 
@@ -29,15 +34,24 @@ declare module "@/lib/rag/embed" {
 
 declare module "@/lib/vector" {
   /**
-   * Vector store factory exported by the vector-agent.
+   * Vector store factory. The real module returns a full
+   * `VectorStore` (createIndex/upsert/query/reset); the ambient type
+   * here is intentionally narrow because the contract is exercised
+   * through the real module.
    */
-  export function getVectorStore(): Promise<{
-    query(args: { vector: number[]; topK: number }): Promise<
-      Array<{
-        id: string;
-        score: number;
-        metadata?: Record<string, unknown>;
-      }>
-    >;
-  }>;
+  export interface VectorStore {
+    createIndex(indexName: string, dimension: number): Promise<void>;
+    upsert(
+      indexName: string,
+      rows: ReadonlyArray<{ id: string; vector: number[]; metadata?: Record<string, unknown> }>,
+    ): Promise<void>;
+    query(
+      indexName: string,
+      queryVector: number[],
+      options?: { topK?: number; minScore?: number },
+    ): Promise<Array<{ id: string; score: number; metadata: Record<string, unknown> }>>;
+    reset(indexName: string): Promise<void>;
+  }
+  export function getVectorStore(): Promise<VectorStore>;
+  export function _resetVectorStoreForTesting(): void;
 }
