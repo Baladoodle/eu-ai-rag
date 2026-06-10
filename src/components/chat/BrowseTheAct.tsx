@@ -3,9 +3,9 @@
 /**
  * BrowseTheAct
  * ----------------------------------------------------------------------------
- * A small expandable panel under the empty state that lists the
- * regulation's chapters with their article titles. Clicking an article
- * title seeds the composer with a query about that article.
+ * A trigger button that opens a right-side sheet listing the regulation's
+ * chapters with their article titles. Clicking an article title seeds the
+ * composer with a query about that article AND closes the sheet.
  *
  * Why this is the chosen "new feature": the EU AI Act is structured
  * (Articles 1-113, with titles) and users coming to the tool for the
@@ -13,16 +13,28 @@
  * anything. Listing articles gives them a mental model and a one-click
  * way to start a question.
  *
+ * Why a side sheet (not an inline expand): an inline expand pushes the
+ * rest of the page down on click, which feels forced and disorienting.
+ * A side sheet keeps the welcome composition stable and gives the
+ * chapter list a focused, full-height canvas to scan.
+ *
  * Data: the canonical article titles for Regulation (EU) 2024/1689.
  * Kept as a static array because the titles don't change; this is a
  * navigation aid, not the RAG corpus.
  * ----------------------------------------------------------------------------
  */
-import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, ChevronDown, Search } from "lucide-react";
+import { motion } from "framer-motion";
+import { BookOpen, Search } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { log } from "@/lib/logger";
 import { fadeInVariants } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -176,23 +188,35 @@ interface BrowseTheActProps {
 export function BrowseTheAct({ onSelectArticle, className }: BrowseTheActProps) {
   const [open, setOpen] = React.useState(false);
 
+  const handleOpenChange = React.useCallback((next: boolean) => {
+    log.info({ open: next }, "browse.toggle");
+    setOpen(next);
+  }, []);
+
+  const handleSelectArticle = React.useCallback(
+    (article: ArticleEntry) => {
+      const seed = `What does Article ${article.number} say about ${article.title.toLowerCase()}?`;
+      log.info({ article: article.number }, "browse.article.select");
+      onSelectArticle(seed);
+      setOpen(false);
+    },
+    [onSelectArticle]
+  );
+
   return (
     <motion.section
       initial="hidden"
       animate="visible"
       variants={fadeInVariants}
-      className={cn("mx-auto w-full max-w-2xl px-4 pb-3", className)}
+      className={cn("mx-auto w-full max-w-2xl px-4 pb-2", className)}
     >
       <div className="rounded-xl border border-border/50 bg-card/30">
         <Button
           type="button"
           variant="ghost"
-          onClick={() => {
-            log.info({ open: !open }, "browse.toggle");
-            setOpen((v) => !v);
-          }}
+          onClick={() => handleOpenChange(true)}
+          aria-haspopup="dialog"
           aria-expanded={open}
-          aria-controls="browse-the-act-panel"
           className="w-full justify-between rounded-xl px-4 py-3 text-sm font-medium"
         >
           <span className="flex items-center gap-2">
@@ -202,46 +226,45 @@ export function BrowseTheAct({ onSelectArticle, className }: BrowseTheActProps) 
               113 articles
             </span>
           </span>
-          <ChevronDown
-            aria-hidden="true"
-            className={cn(
-              "size-4 text-muted-foreground transition-transform duration-200",
-              open && "rotate-180"
-            )}
-          />
+          <span aria-hidden="true" className="text-muted-foreground text-xs">
+            Open
+          </span>
         </Button>
-
-        <AnimatePresence initial={false}>
-          {open ? (
-            <motion.div
-              id="browse-the-act-panel"
-              key="panel"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden"
-            >
-              <div className="border-t border-border/40 px-2 py-2">
-                {CHAPTERS.map((chapter) => (
-                  <ChapterBlock
-                    key={chapter.id}
-                    chapter={chapter}
-                    onSelectArticle={onSelectArticle}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
       </div>
+
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 border-l border-border/40 bg-popover p-0 sm:max-w-[420px]"
+        >
+          <SheetHeader className="border-b border-border/40 px-5 py-4">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="size-4 text-muted-foreground" aria-hidden="true" />
+              Browse the Act
+            </SheetTitle>
+            <SheetDescription>
+              113 articles across 10 chapters of Regulation (EU) 2024/1689.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-3 py-3">
+            {CHAPTERS.map((chapter) => (
+              <ChapterBlock
+                key={chapter.id}
+                chapter={chapter}
+                onSelectArticle={handleSelectArticle}
+              />
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
     </motion.section>
   );
 }
 
 interface ChapterBlockProps {
   chapter: Chapter;
-  onSelectArticle: (text: string) => void;
+  onSelectArticle: (article: ArticleEntry) => void;
 }
 
 function ChapterBlock({ chapter, onSelectArticle }: ChapterBlockProps) {
@@ -259,14 +282,10 @@ function ChapterBlock({ chapter, onSelectArticle }: ChapterBlockProps) {
           <li key={article.number}>
             <button
               type="button"
-              onClick={() => {
-                const seed = `What does Article ${article.number} say about ${article.title.toLowerCase()}?`;
-                log.info({ article: article.number }, "browse.article.select");
-                onSelectArticle(seed);
-              }}
+              onClick={() => onSelectArticle(article)}
               className={cn(
                 "group flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-xs",
-                "transition-colors hover:bg-muted/60",
+                "hover:bg-muted/60",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               )}
             >
@@ -276,7 +295,7 @@ function ChapterBlock({ chapter, onSelectArticle }: ChapterBlockProps) {
               <span className="flex-1 text-foreground/90">{article.title}</span>
               <Search
                 aria-hidden="true"
-                className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                className="size-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100"
               />
             </button>
           </li>
