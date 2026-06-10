@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvalCase",
+  "type": "object",
+  "required": ["id", "category", "difficulty", "question", "expectedSources", "expectedTopics"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^q[0-9]{2,}$" },
+    "category": {
+      "type": "string",
+      "enum": ["agents", "workflows", "rag", "tools", "memory", "deployment", "integrations", "general"]
+    },
+    "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+    "question": { "type": "string", "minLength": 5 },
+    "expectedSources": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "expectedTopics": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    }
+  }
+}

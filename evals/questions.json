@@ -1,0 +1,304 @@
+{
+  "$schema": "./questions.schema.json",
+  "version": "1.0.0",
+  "description": "20 Q&A pairs that exercise the mastra-expert RAG. Each case is hand-written after reading the official Mastra docs (https://mastra.ai/docs). Categories are balanced and difficulty is split 8 easy / 8 medium / 4 hard. Run with: npm run eval.",
+  "cases": [
+    {
+      "id": "q01",
+      "category": "agents",
+      "difficulty": "easy",
+      "question": "What is Mastra and what are its main features?",
+      "expectedSources": [
+        "https://mastra.ai/docs",
+        "https://mastra.ai/docs/agents/overview"
+      ],
+      "expectedTopics": [
+        "agents",
+        "workflows",
+        "RAG",
+        "TypeScript framework"
+      ]
+    },
+    {
+      "id": "q02",
+      "category": "agents",
+      "difficulty": "easy",
+      "question": "How do I create a basic Mastra agent?",
+      "expectedSources": [
+        "https://mastra.ai/docs/agents/overview"
+      ],
+      "expectedTopics": [
+        "createAgent",
+        "model",
+        "instructions",
+        "generate"
+      ]
+    },
+    {
+      "id": "q03",
+      "category": "rag",
+      "difficulty": "easy",
+      "question": "What are the main steps in a Mastra RAG pipeline?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/overview"
+      ],
+      "expectedTopics": [
+        "chunk",
+        "embed",
+        "store",
+        "query"
+      ]
+    },
+    {
+      "id": "q04",
+      "category": "rag",
+      "difficulty": "easy",
+      "question": "Which package provides MDocument for chunking?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/overview"
+      ],
+      "expectedTopics": [
+        "@mastra/rag",
+        "MDocument",
+        "chunk"
+      ]
+    },
+    {
+      "id": "q05",
+      "category": "tools",
+      "difficulty": "easy",
+      "question": "How do I give an agent a custom tool in Mastra?",
+      "expectedSources": [
+        "https://mastra.ai/docs/agents/overview"
+      ],
+      "expectedTopics": [
+        "createTool",
+        "tools array",
+        "agent"
+      ]
+    },
+    {
+      "id": "q06",
+      "category": "memory",
+      "difficulty": "easy",
+      "question": "How does Mastra memory keep track of conversations?",
+      "expectedSources": [
+        "https://mastra.ai/docs/memory/overview"
+      ],
+      "expectedTopics": [
+        "resource",
+        "thread",
+        "Memory"
+      ]
+    },
+    {
+      "id": "q07",
+      "category": "workflows",
+      "difficulty": "easy",
+      "question": "What is a step in a Mastra workflow?",
+      "expectedSources": [
+        "https://mastra.ai/docs/workflows/overview"
+      ],
+      "expectedTopics": [
+        "createStep",
+        "inputSchema",
+        "outputSchema",
+        "execute"
+      ]
+    },
+    {
+      "id": "q08",
+      "category": "deployment",
+      "difficulty": "easy",
+      "question": "Can I deploy a Mastra app to Vercel?",
+      "expectedSources": [
+        "https://mastra.ai/docs/deployment/overview"
+      ],
+      "expectedTopics": [
+        "Vercel",
+        "deployer",
+        "build"
+      ]
+    },
+    {
+      "id": "q09",
+      "category": "rag",
+      "difficulty": "medium",
+      "question": "How do I configure Mastra to use pgvector for storage?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/vector-databases",
+        "https://mastra.ai/docs/rag/overview"
+      ],
+      "expectedTopics": [
+        "PgVector",
+        "@mastra/pg",
+        "connection string",
+        "createIndex"
+      ]
+    },
+    {
+      "id": "q10",
+      "category": "rag",
+      "difficulty": "medium",
+      "question": "How do I filter vector query results by metadata in Mastra?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/retrieval"
+      ],
+      "expectedTopics": [
+        "filter",
+        "metadata",
+        "MongoDB-style operators"
+      ]
+    },
+    {
+      "id": "q11",
+      "category": "agents",
+      "difficulty": "medium",
+      "question": "How does Mastra's model router work, and what is the format for model IDs?",
+      "expectedSources": [
+        "https://mastra.ai/docs/agents/overview"
+      ],
+      "expectedTopics": [
+        "ModelRouterEmbeddingModel",
+        "provider/model-name",
+        "model router"
+      ]
+    },
+    {
+      "id": "q12",
+      "category": "rag",
+      "difficulty": "medium",
+      "question": "What rerankers does Mastra support, and when should I use one?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/retrieval"
+      ],
+      "expectedTopics": [
+        "MastraAgentRelevanceScorer",
+        "CohereRelevanceScorer",
+        "rerank"
+      ]
+    },
+    {
+      "id": "q13",
+      "category": "integrations",
+      "difficulty": "medium",
+      "question": "Which chunking strategies does MDocument support and what are the trade-offs?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/overview"
+      ],
+      "expectedTopics": [
+        "recursive",
+        "sliding window",
+        "overlap",
+        "size"
+      ]
+    },
+    {
+      "id": "q14",
+      "category": "memory",
+      "difficulty": "medium",
+      "question": "What is working memory in Mastra and how is it different from message history?",
+      "expectedSources": [
+        "https://mastra.ai/docs/memory/working-memory"
+      ],
+      "expectedTopics": [
+        "working memory",
+        "resource-scoped",
+        "thread-scoped",
+        "system prompt"
+      ]
+    },
+    {
+      "id": "q15",
+      "category": "workflows",
+      "difficulty": "medium",
+      "question": "How do I run workflow steps in parallel in Mastra?",
+      "expectedSources": [
+        "https://mastra.ai/docs/workflows/overview"
+      ],
+      "expectedTopics": [
+        "parallel",
+        "control flow",
+        ".then"
+      ]
+    },
+    {
+      "id": "q16",
+      "category": "integrations",
+      "difficulty": "medium",
+      "question": "Which vector stores does Mastra support out of the box?",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/vector-databases"
+      ],
+      "expectedTopics": [
+        "Pinecone",
+        "Qdrant",
+        "MongoDB",
+        "Chroma"
+      ]
+    },
+    {
+      "id": "q17",
+      "category": "rag",
+      "difficulty": "hard",
+      "question": "Walk me through building a production RAG pipeline in Mastra with custom embedding models, pgvector, and reranking. Include the exact imports.",
+      "expectedSources": [
+        "https://mastra.ai/docs/rag/overview",
+        "https://mastra.ai/docs/rag/retrieval",
+        "https://mastra.ai/docs/rag/vector-databases"
+      ],
+      "expectedTopics": [
+        "MDocument",
+        "embedMany",
+        "PgVector",
+        "rerank",
+        "imports"
+      ]
+    },
+    {
+      "id": "q18",
+      "category": "agents",
+      "difficulty": "hard",
+      "question": "How do I stream tokens from a Mastra agent and handle tool calls mid-stream?",
+      "expectedSources": [
+        "https://mastra.ai/docs/agents/overview"
+      ],
+      "expectedTopics": [
+        "stream",
+        "tool calls",
+        "tokens",
+        "events"
+      ]
+    },
+    {
+      "id": "q19",
+      "category": "memory",
+      "difficulty": "hard",
+      "question": "How do I implement observational memory for very long conversations in Mastra, and when does it kick in?",
+      "expectedSources": [
+        "https://mastra.ai/docs/memory/overview"
+      ],
+      "expectedTopics": [
+        "observational memory",
+        "background agents",
+        "compression",
+        "context window"
+      ]
+    },
+    {
+      "id": "q20",
+      "category": "general",
+      "difficulty": "hard",
+      "question": "How do I deploy a Mastra workflow that uses Inngest for retries and durable execution?",
+      "expectedSources": [
+        "https://mastra.ai/docs/deployment/overview"
+      ],
+      "expectedTopics": [
+        "Inngest",
+        "retries",
+        "durable execution",
+        "workflows"
+      ]
+    }
+  ]
+}
