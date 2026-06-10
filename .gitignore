@@ -51,4 +51,7 @@ next-env.d.ts
 /.cache/
 /playwright-report/
 /test-results/
-/evals/
+
+# eval infrastructure: keep questions, scorer, runner, and docs in git;
+# ignore generated reports (they're regenerable with `npm run eval`).
+/evals/reports/
