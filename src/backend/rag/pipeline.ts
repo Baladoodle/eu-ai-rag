@@ -143,7 +143,10 @@ export async function runRagPipeline(
   //   prompt's refusal rule covers this, but we'd rather not even
   //   *call* the LLM — saves tokens, latency, and the cost of a 4xx
   //   from the LLM.
-  if (retrieval.chunks.length === 0 || retrieval.metadata.topScore < (isLocalEmbedderMode() ? LOCAL_EMPTY_RETRIEVAL_THRESHOLD : EMPTY_RETRIEVAL_THRESHOLD)) {
+  if (
+    retrieval.chunks.length === 0 ||
+    retrieval.metadata.topScore < (localMode ? LOCAL_EMPTY_RETRIEVAL_THRESHOLD : EMPTY_RETRIEVAL_THRESHOLD)
+  ) {
     log.warn(
       {
         chunkCount: retrieval.chunks.length,
