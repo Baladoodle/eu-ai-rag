@@ -3,10 +3,10 @@
 /**
  * SuggestedQuestions
  * ----------------------------------------------------------------------------
- * Renders 3-4 starter questions as clickable chips. Clicking fills the
- * composer input and focuses it; the user still has to press Enter to send
- * (we never auto-submit — that would be presumptuous about a question the
- * user may want to edit).
+ * Renders 3-4 starter questions as clickable chips. Clicking submits the
+ * question immediately — the empty state has no composer context to
+ * "fill", and the questions are vetted to be a useful default. The user
+ * can always type their own question instead.
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
