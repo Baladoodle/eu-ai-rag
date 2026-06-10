@@ -9,7 +9,6 @@
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
-import * as React from "react";
 
 import { fadeInVariants } from "@/lib/motion";
 import { cn } from "@/lib/utils";
