@@ -1,11 +1,12 @@
 /**
  * Tests for src/ingestion/scrapers/docs.ts and _shared.ts.
  *
- * We mock the global `fetch` (and p-retry is a no-op for 200s) so the
- * tests run offline. We verify:
+ * The docs scraper fetches the EU AI Act (Articles + Recitals) from
+ * https://artificialintelligenceact.eu. We mock the global `fetch` so
+ * the tests run offline. We verify:
  *   - HTML is converted to markdown.
  *   - chrome (nav, footer, scripts) is stripped.
- *   - sourceIds are stable and predictable.
+ *   - sourceIds are stable and predictable: ai-act/article-N, ai-act/recital-N.
  *   - empty / too-short pages are skipped, not errored.
  *   - non-2xx responses eventually surface (after p-retry gives up on 4xx).
  */
@@ -33,24 +34,30 @@ function mockFetchOnce(responder: (url: string) => Response | Promise<Response>)
 
 afterEach(async () => {
   globalThis.fetch = realFetch;
-  await rm(RAW_DIR, { recursive: true, force: true });
+  // Force-clear may race with leftover directories from other test files
+  // (the issues test writes into data/raw/guidance/ in parallel). Retry once.
+  try {
+    await rm(RAW_DIR, { recursive: true, force: true });
+  } catch {
+    await new Promise((r) => setTimeout(r, 50));
+    await rm(RAW_DIR, { recursive: true, force: true });
+  }
 });
 
-describe("docs scraper", () => {
+describe("docs scraper (EU AI Act)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("fetches each doc seed, converts to markdown, returns a RawDocument", async () => {
+  it("fetches the first article, converts to markdown, returns a RawDocument", async () => {
     const HTML = `
-      <html><head><title>RAG Overview - Mastra</title></head>
+      <html><head><title>Article 1 - EU AI Act</title></head>
       <body>
         <nav>skip me</nav>
         <script>skip me too</script>
         <main>
-          <h1>RAG Overview</h1>
-          <p>Mastra provides a complete RAG pipeline: chunk, embed, retrieve, rerank.</p>
-          <pre><code>const doc = MDocument.fromText(text);</code></pre>
+          <h1>Article 1 — Subject matter</h1>
+          <p>This Regulation lays down harmonised rules on artificial intelligence (the "AI Act") placed on the market or put into service in the Union.</p>
         </main>
         <footer>also skip me</footer>
       </body></html>`;
@@ -58,26 +65,33 @@ describe("docs scraper", () => {
 
     const { scrapeDocs } = await import("@/ingestion/scrapers/docs");
     const docs = await scrapeDocs({ limit: 1 });
+    // limit=1 fetches only the first article. Recitals are skipped at limit=1
+    // (recitals are fetched second), so docs has length 1.
     expect(docs).toHaveLength(1);
-    expect(docs[0]!.sourceId).toBe("mastra-docs/landing");
+    expect(docs[0]!.sourceId).toBe("ai-act/article-1");
     expect(docs[0]!.kind).toBe("docs");
     // chrome was stripped, body text was kept
-    expect(docs[0]!.text).toContain("RAG Overview");
-    expect(docs[0]!.text).toContain("MDocument.fromText");
+    expect(docs[0]!.text).toContain("Article 1");
+    expect(docs[0]!.text).toContain("harmonised rules");
     expect(docs[0]!.text).not.toContain("skip me");
+    // Metadata marks it as an article.
+    expect(docs[0]!.metadata.kind).toBe("article");
+    expect(docs[0]!.metadata.articleNumber).toBe(1);
   });
 
-  it("uses the path-based sourceId for nested pages", async () => {
-    // Per-call responses so each of the 2 seeds gets a non-empty body.
+  it("scrapes recitals when the limit is high enough to reach them", async () => {
+    // Per-call responses so the article and recital both get a non-empty body.
     const responder = vi.fn((url: string) => {
       const body = `<html><body><main><p>${"x".repeat(400)} for ${url}</p></main></body></html>`;
       return new Response(body, { status: 200 });
     });
     mockFetchOnce(responder);
     const { scrapeDocs } = await import("@/ingestion/scrapers/docs");
-    const docs = await scrapeDocs({ limit: 2 });
-    // limit=2 -> first two seeds, which are landing + rag/overview
-    expect(docs.map((d) => d.sourceId)).toContain("mastra-docs/rag/overview");
+    // Pass a limit that's high enough to include at least one recital.
+    // We don't assert a specific count because the order is "all articles,
+    // then all recitals"; we just need a recital sourceId to appear.
+    const docs = await scrapeDocs({ limit: 120 });
+    expect(docs.map((d) => d.sourceId)).toContain("ai-act/recital-1");
   });
 
   it("skips pages whose markdown is too short (likely JS-only)", async () => {
@@ -120,7 +134,7 @@ describe("htmlToMarkdown helper", () => {
   });
 
   it("extracts the page title from the head when Readability returns one", async () => {
-    const HTML = `<html><head><title>My Page Title</title></head><body><main><p>${"a".repeat(300)}</p></main></body></html>`;
+    const HTML = `<html><head><title>Article 3 - EU AI Act</title></head><body><main><p>${"a".repeat(300)}</p></main></body></html>`;
     const { htmlToMarkdown } = await import("@/ingestion/scrapers/_shared");
     const { title } = htmlToMarkdown(HTML, "https://example.com/");
     expect(title).toBeDefined();

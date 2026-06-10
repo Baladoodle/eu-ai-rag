@@ -50,9 +50,9 @@ describe("EmptyState", () => {
         onSelect={() => {}}
       />
     );
-    expect(html).toContain("Mastra Expert");
+    expect(html).toContain("EU AI Act Expert");
     expect(html).toContain("Hello?");
-    expect(html).toContain("Ask anything about the Mastra framework.");
+    expect(html).toContain("Ask anything about Regulation (EU) 2024/1689.");
   });
 });
 
