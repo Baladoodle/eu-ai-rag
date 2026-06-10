@@ -1,0 +1,149 @@
+"use client"
+
+/**
+ * ChatInput
+ * ----------------------------------------------------------------------------
+ * The composer at the bottom of the chat. A growing textarea, a submit
+ * button, and a stop button when the parent is streaming.
+ *
+ * Why a textarea (not <input>): chat prompts are almost always more than
+ * one line, and the user should be able to write a paragraph without the
+ * composer fighting them.
+ *
+ * Keyboard:
+ *   - Enter submits
+ *   - Shift+Enter inserts a newline
+ *   - Escape while focused does nothing destructive (the user is mid-thought)
+ * ----------------------------------------------------------------------------
+ */
+import { ArrowUp, Square } from "lucide-react";
+import * as React from "react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+interface ChatInputProps {
+  /** Called when the user submits a non-empty message. */
+  onSubmit: (text: string) => void;
+  /** Called when the user clicks the stop button while streaming. */
+  onStop?: () => void;
+  /** True while the assistant is generating. Disables submit; reveals Stop. */
+  isStreaming?: boolean;
+  /** Optional placeholder override. */
+  placeholder?: string;
+  /** Imperatively focus the input (exposed via ref). */
+  className?: string;
+}
+
+const MAX_TEXTAREA_HEIGHT = 200;
+
+export function ChatInput({
+  onSubmit,
+  onStop,
+  isStreaming = false,
+  placeholder = "Ask about Mastra…",
+  className,
+}: ChatInputProps) {
+  const [value, setValue] = React.useState("");
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  // Auto-grow the textarea up to a cap. We measure with `scrollHeight`
+  // on every keystroke — cheap because the textarea only ever holds
+  // a few hundred characters in normal use.
+  React.useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+  }, [value]);
+
+  const canSend = value.trim().length > 0 && !isStreaming;
+
+  const handleSubmit = () => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onSubmit(trimmed);
+    setValue("");
+    // Reset the textarea height so the composer doesn't keep a tall box
+    // after a multi-line send.
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
+    });
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        handleSubmit();
+      }}
+      className={cn(
+        "mx-auto w-full max-w-2xl px-4 pb-6 pt-2",
+        className
+      )}
+    >
+      <div
+        className={cn(
+          "group relative flex items-end gap-2 rounded-2xl border border-border/60 bg-card/40 p-2",
+          "transition-colors focus-within:border-border focus-within:bg-card/70",
+          "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_16px_-8px_rgba(0,0,0,0.12)]"
+        )}
+      >
+        <label htmlFor="chat-composer" className="sr-only">
+          Message
+        </label>
+        <textarea
+          id="chat-composer"
+          ref={textareaRef}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          spellCheck
+          autoComplete="off"
+          className={cn(
+            "min-h-8 max-h-[200px] flex-1 resize-none border-0 bg-transparent px-2 py-1.5",
+            "text-sm leading-relaxed text-foreground placeholder:text-muted-foreground",
+            "outline-none focus:outline-none focus-visible:outline-none"
+          )}
+        />
+
+        {isStreaming && onStop ? (
+          <Button
+            type="button"
+            onClick={onStop}
+            aria-label="Stop generating"
+            size="icon"
+            variant="outline"
+            className="size-9 shrink-0 rounded-xl"
+          >
+            <Square className="size-3.5 fill-current" aria-hidden="true" />
+          </Button>
+        ) : (
+          <Button
+            type="submit"
+            disabled={!canSend}
+            aria-label="Send message"
+            size="icon"
+            className="size-9 shrink-0 rounded-xl"
+          >
+            <ArrowUp className="size-4" aria-hidden="true" />
+          </Button>
+        )}
+      </div>
+      <p className="mt-2 px-2 text-[10px] text-muted-foreground">
+        Press <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Enter</kbd> to send, <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Shift+Enter</kbd> for newline.
+      </p>
+    </form>
+  );
+}
