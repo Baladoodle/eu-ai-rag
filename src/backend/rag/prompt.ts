@@ -10,27 +10,37 @@
  *   its training data and produce confident-sounding answers that may
  *   have nothing to do with the chunks you retrieved.
  *
- *   The system prompt below is engineered to do three things:
+ *   For a regulation Q&A, the failure mode is not "invented API" — it's
+ *   "plausible paraphrase of an Article the user has no way to verify."
+ *   The system prompt below is engineered to do four things:
  *     1. Tell the model WHO it is (so its tone and scope are bounded).
- *     2. Tell it to USE ONLY the retrieved context (so it can't
- *        hallucinate from general knowledge).
- *     3. Tell it to CITE sources inline (so the user can verify).
+ *     2. Tell it to USE ONLY the retrieved context (so it can't hallucinate
+ *        from general legal knowledge).
+ *     3. Tell it to CITE Article / Recital / Annex numbers inline (so the
+ *        user can verify the answer against the authentic text).
  *     4. Tell it to REFUSE gracefully when there's no useful context
- *        (so "I don't know" is preferred over invention).
+ *        ("The provided context does not address that").
  *
  * Why we constrain to the context (the "what if we don't?" thought):
  *   Without the "use only the context" rule, the model will happily
- *   invent plausible-sounding APIs that don't exist in Mastra. The
- *   user can't tell invention from truth unless we force the model
- *   to limit itself to retrieved passages. A few-shot example at the
- *   end of the prompt makes the rule stick — models imitate patterns
- *   better than they follow rules.
+ *   paraphrase an Article in a way that sounds right but reverses a
+ *   conditional or drops a recital. The user has no way to tell
+ *   invention from truth unless we force the model to limit itself to
+ *   retrieved passages AND cite the specific passage being used.
+ *
+ * Why we distinguish Articles from Recitals in the prompt:
+ *   Articles are the legally binding text. Recitals are explanatory
+ *   background — they give the *why* but are not themselves enforceable.
+ *   A correct answer must not present a Recital as if it were an Article,
+ *   and a useful answer that has both should label each clearly.
  *
  * Why the prompt is *not* just `context + question`:
  *   The model needs to know:
- *     - What to do when the context is empty ("I don't know").
+ *     - What to do when the context is empty ("The provided context
+ *       does not address that.").
  *     - The expected citation format (`[1]`, `[2]`, ...).
  *     - That short, accurate answers beat long, hand-wavy ones.
+ *     - That "I don't know" is the right answer when retrieval fails.
  *
  * Why we put the source list *between* the rules and the question:
  *   The model attends most strongly to the start and end of the
@@ -54,26 +64,36 @@ import type { Source } from "@/../api-contract";
  *   also keep tone instructions short — over-long style rules start
  *   to override the substantive constraints.
  */
-const SYSTEM_PROMPT_RULES = `You are Mastra Expert, a focused assistant that answers developer questions about the Mastra AI framework.
+const SYSTEM_PROMPT_RULES = `You are EU AI Act Expert, a focused assistant that answers questions about Regulation (EU) 2024/1689 (the "EU AI Act").
 
 # Behavior
-- Be concise, accurate, and grounded in the provided context.
-- Prefer short, runnable code snippets over prose.
-- If the question is ambiguous, state the assumption you are making and answer.
-- Never invent APIs, function names, or options that aren't in the context.
+- Be precise, conservative, and grounded in the provided context.
+- Cite specific Article numbers (e.g. "Article 6(3)"), Recital numbers (e.g. "Recital 10"), and Annex numbers (e.g. "Annex III") whenever a claim can be traced to one.
+- If the question is ambiguous, state the assumption you are making before answering.
+- Never invent Article numbers, cross-references, or obligations that are not in the context.
+
+# Sources — what the user is looking at
+- The "Sources" block below contains passages from the EU AI Act (Articles, Recitals, Annexes) and from European Commission guidance pages. Each source is numbered.
+- Articles are the legally binding text. Recitals are explanatory background and are not themselves enforceable. Annexes contain the lists, criteria, and procedural detail that the Articles reference.
+- When a source is an Article, the source label will say "Article N". When it is a Recital, "Recital N". When it is an Annex, "Annex N" (or "Annex I", "Annex II", etc.). When it is Commission guidance, the source label will say "Commission — ...".
+- If a claim is supported by an Article, cite the Article. If a claim is supported only by a Recital, you may cite the Recital but make clear it is explanatory (e.g. "Recital 10 explains that..."), not binding.
 
 # Citations (CRITICAL)
 - Every factual claim must end with a citation in the form \`[n]\` where \`n\` is the 1-based index of the source you used.
 - If multiple sources support a claim, cite all of them: \`[1][2]\`.
 - The sources block below is your *only* allowed reference. Do not cite something that isn't in the block.
+- A bare "[1]" with no preceding text is not a citation — it must be attached to a claim.
 
 # Refusal
-- If the sources block is empty, or none of the sources answer the user's question, respond EXACTLY with: "I couldn't find that in the Mastra docs. Could you rephrase the question?" — no other text.
-- Never speculate. A short, honest "I don't know" is better than a confident wrong answer.
+- If the sources block is empty, or none of the sources answer the user's question, respond EXACTLY with: "The provided context does not address that." — no other text.
+- Never speculate on legal interpretation beyond what the Act text says.
+- Never give legal advice. If the user asks "should I do X", say: "I can describe what the Act says about X, but I can't give legal advice. Consult a qualified EU regulatory lawyer." then quote the relevant Articles.
+- Never compare the EU AI Act to other jurisdictions' laws (US Executive Order 14110, China's AI regulations, etc.) — that is outside the corpus.
 
 # Output format
 - Plain text, no Markdown headers. Code blocks are fine.
-- Lead with the answer, then any code, then citations. Do not include a "Sources:" section in your reply — the UI shows sources separately.`;
+- Lead with the answer, then any quoted text, then citations. Do not include a "Sources:" section in your reply — the UI shows sources separately.
+- Prefer short, direct sentences. Avoid "it is worth noting that..." or "in general..." filler.`;
 
 /**
  * A worked example that shows the model what a *good* answer looks like.
@@ -86,11 +106,11 @@ const SYSTEM_PROMPT_RULES = `You are Mastra Expert, a focused assistant that ans
  */
 const FEW_SHOT_EXAMPLE = `
 # Example
-User: How do I create a pgvector-backed vector store in Mastra?
-Assistant: Use \`PgVector\` from \`@mastra/pg\` and pass the connection string [1]. Call \`createIndex({ indexName, dimension: 1024 })\` once before upserting [2].`;
+User: What is a "high-risk AI system" under the AI Act?
+Assistant: Under Article 6, an AI system is high-risk if (a) it is a safety component of a product covered by one of the Union harmonisation legislations listed in Annex I, and that product is required to undergo a third-party conformity assessment, or (b) it is listed in Annex III [1]. The system must then meet the requirements in Articles 8 through 17 [2].`;
 
 const SYSTEM_PROMPT_INTRO =
-  "You are answering a question using ONLY the sources listed below. If a source is not relevant, do not cite it.";
+  "You are answering a question using ONLY the sources listed below. If a source is not relevant, do not cite it. The sources are passages from Regulation (EU) 2024/1689 (the EU AI Act) and from European Commission guidance pages.";
 
 /**
  * The shape of the system prompt and the user-context block.
@@ -153,10 +173,39 @@ function buildSourcesBlock(chunks: RetrievedChunk[]): string {
   }
   const items = chunks.map((chunk, idx) => {
     const n = idx + 1;
+    const label = inferSourceLabel(chunk);
     const snippet = truncate(chunk.text, 1200);
-    return `[${n}] ${snippet}`;
+    return `[${n}] ${label} — ${snippet}`;
   });
   return `## Sources\n${items.join("\n\n")}`;
+}
+
+/**
+ * Infer a short human-readable label for a retrieved chunk.
+ *
+ * Why this exists: the model needs to know which source is an Article,
+ * which is a Recital, and which is Commission guidance, so it can cite
+ * the right number in the right format ("Article 6(3)" vs. "Recital 10"
+ * vs. "the Commission's FAQ"). We pull the label from the chunk's
+ * metadata when available, falling back to the title.
+ */
+function inferSourceLabel(chunk: RetrievedChunk): string {
+  const meta = (chunk.metadata ?? {}) as Record<string, unknown>;
+  const kind = typeof meta.kind === "string" ? meta.kind : undefined;
+  if (kind === "article" && typeof meta.articleNumber === "number") {
+    return `Article ${meta.articleNumber}`;
+  }
+  if (kind === "recital" && typeof meta.recitalNumber === "number") {
+    return `Recital ${meta.recitalNumber}`;
+  }
+  if (kind === "annex" && typeof meta.annexOrdinal === "number") {
+    return `Annex ${meta.annexOrdinal}`;
+  }
+  if (kind === "guidance") {
+    return "Commission guidance";
+  }
+  const title = typeof meta.title === "string" ? meta.title : undefined;
+  return title ?? "EU AI Act source";
 }
 
 /**
