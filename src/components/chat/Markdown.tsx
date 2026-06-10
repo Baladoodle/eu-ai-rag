@@ -19,13 +19,6 @@ import { cn } from "@/lib/utils";
 interface MarkdownProps {
   children: string;
   className?: string;
-  /**
-   * IDs of citations the current text references. When set, `[1]`, `[2]`
-   * etc. become inline superscript chips (handled by SourceCitations).
-   * The Message component is responsible for choosing that presentation
-   * — here we just render the text as-is.
-   */
-  citationMode?: "plain" | "chips";
 }
 
 export function Markdown({ children, className }: MarkdownProps) {

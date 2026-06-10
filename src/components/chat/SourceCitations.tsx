@@ -30,39 +30,29 @@ import type { Citation } from "@/../api-contract";
 interface CitationChipsProps {
   /** 1-based index of the highest citation in this message. */
   count: number;
-  /**
-   * Click handler. The Message component decides what to do — usually
-   * scroll the source list into view and flash the matching card.
-   */
-  onSelect?: (index: number) => void;
-  className?: string;
 }
 
-export function CitationChips({ count, onSelect, className }: CitationChipsProps) {
+export function CitationChips({ count }: CitationChipsProps) {
   if (count <= 0) return null;
 
   return (
     <span
       role="list"
       aria-label={`${count} citation${count === 1 ? "" : "s"}`}
-      className={cn("ml-1 inline-flex items-center gap-1 align-baseline", className)}
+      className="ml-1 inline-flex items-center gap-1 align-baseline"
     >
       {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
-        <button
+        <span
           key={n}
-          type="button"
           role="listitem"
-          aria-label={`Jump to source ${n}`}
-          onClick={() => onSelect?.(n)}
+          aria-label={`Source ${n}`}
           className={cn(
             "inline-flex h-4 min-w-4 items-center justify-center rounded-md border border-border/60 bg-muted/50 px-1",
-            "text-[10px] font-medium text-muted-foreground",
-            "transition-colors hover:border-border hover:bg-muted hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            "text-[10px] font-medium text-muted-foreground"
           )}
         >
           {n}
-        </button>
+        </span>
       ))}
     </span>
   );
