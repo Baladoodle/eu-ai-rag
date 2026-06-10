@@ -80,13 +80,6 @@ const chatRequestSchema = z.object({
 });
 
 /**
- * The default request timeout, in seconds. Vercel's edge runtime has a
- * hard limit of 30s; we give ourselves 25s for the LLM to start
- * streaming tokens.
- */
-const ROUTE_TIMEOUT_SECONDS = 25;
-
-/**
  * Generate a request id (UUID-ish). Used for log correlation.
  *
  * Why: a single chat turn may produce dozens of log lines. Threading
@@ -338,6 +331,3 @@ function serializeError(err: unknown): Record<string, unknown> {
   }
   return { value: String(err) };
 }
-
-// Avoid unused-import warnings for the timeout constant.
-void ROUTE_TIMEOUT_SECONDS;
