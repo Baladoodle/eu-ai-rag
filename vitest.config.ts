@@ -12,7 +12,13 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
+    include: [
+      "tests/unit/**/*.test.ts",
+      "tests/integration/**/*.test.ts",
+      "tests/backend/**/*.test.ts",
+      "tests/ingestion/**/*.test.ts",
+      "tests/ui/**/*.test.tsx",
+    ],
     exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
     setupFiles: ["./src/test/setup.ts"],
   },
