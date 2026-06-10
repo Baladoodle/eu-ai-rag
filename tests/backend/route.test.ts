@@ -202,4 +202,49 @@ describe("/api/chat route", () => {
     expect(sources).toBeDefined();
     expect(sources?.data?.citations?.length).toBeGreaterThan(0);
   });
+
+  it("accepts an AI SDK v6 message with parts: [{type:'text',text}]", async () => {
+    // The frontend's useChat (AI SDK v6) sends messages in this shape.
+    // The route must accept it and forward the user's text to the pipeline.
+    const req = makeRequest({
+      messages: [
+        {
+          id: "1",
+          role: "user",
+          parts: [{ type: "text", text: "What is Article 5?" }],
+        },
+      ],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    // The pipeline should have been called once, with the user's text
+    // extracted from `parts` (not the missing `content` field).
+    const calls = (runRagPipeline as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(1);
+    const arg = calls[0]?.[0] as { query?: string; messages?: Array<{ content?: string }> };
+    expect(arg.query).toBe("What is Article 5?");
+    // The normalized message must carry the text in `content` for the pipeline.
+    expect(arg.messages?.[0]?.content).toBe("What is Article 5?");
+  });
+
+  it("accepts the legacy v1 {role, content} shape for backwards compat", async () => {
+    const req = makeRequest({
+      messages: [{ id: "m1", role: "user", content: "hello legacy" }],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const calls = (runRagPipeline as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const arg = calls[0]?.[0] as { query?: string };
+    expect(arg.query).toBe("hello legacy");
+  });
+
+  it("returns 400 when the v6 message has empty parts and no content", async () => {
+    const req = makeRequest({
+      messages: [
+        { id: "1", role: "user", parts: [] },
+      ],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
 });
