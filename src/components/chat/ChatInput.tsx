@@ -35,13 +35,13 @@ interface ChatInputProps {
   className?: string;
 }
 
-const MAX_TEXTAREA_HEIGHT = 200;
+const MAX_TEXTAREA_HEIGHT = 220;
 
 export function ChatInput({
   onSubmit,
   onStop,
   isStreaming = false,
-  placeholder = "Ask about Mastra…",
+  placeholder = "Ask about the EU AI Act…",
   className,
 }: ChatInputProps) {
   const [value, setValue] = React.useState("");
@@ -87,15 +87,15 @@ export function ChatInput({
         handleSubmit();
       }}
       className={cn(
-        "mx-auto w-full max-w-2xl px-4 pb-6 pt-2",
+        "mx-auto w-full max-w-2xl px-4 pb-8 pt-3",
         className
       )}
     >
       <div
         className={cn(
-          "group relative flex items-end gap-2 rounded-2xl border border-border/60 bg-card/40 p-2",
-          "transition-colors focus-within:border-border focus-within:bg-card/70",
-          "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_16px_-8px_rgba(0,0,0,0.12)]"
+          "group relative flex items-end gap-2 rounded-2xl border border-border/60 bg-card/50 p-2.5",
+          "transition-colors focus-within:border-foreground/20 focus-within:bg-card/80",
+          "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.18)]"
         )}
       >
         <label htmlFor="chat-composer" className="sr-only">
@@ -112,8 +112,8 @@ export function ChatInput({
           spellCheck
           autoComplete="off"
           className={cn(
-            "min-h-8 max-h-[200px] flex-1 resize-none border-0 bg-transparent px-2 py-1.5",
-            "text-sm leading-relaxed text-foreground placeholder:text-muted-foreground",
+            "min-h-9 max-h-[220px] flex-1 resize-none border-0 bg-transparent px-2 py-1.5",
+            "text-[14px] leading-relaxed text-foreground placeholder:text-muted-foreground/80",
             "outline-none focus:outline-none focus-visible:outline-none"
           )}
         />
@@ -141,8 +141,8 @@ export function ChatInput({
           </Button>
         )}
       </div>
-      <p className="mt-2 px-2 text-[10px] text-muted-foreground">
-        Press <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Enter</kbd> to send, <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Shift+Enter</kbd> for newline.
+      <p className="mt-2.5 px-2 text-[10px] text-muted-foreground/80">
+        Press <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Enter</kbd> to send, <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Shift+Enter</kbd> for newline. Answers cite EU AI Act articles.
       </p>
     </form>
   );
