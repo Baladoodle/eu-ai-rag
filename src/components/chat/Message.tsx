@@ -8,6 +8,11 @@
  * with markdown body, optional streaming cursor, and the source citation
  * list once the stream finishes.
  *
+ * Citation wiring: the message owns the "active citation index" state.
+ * When the user clicks a [n] chip we set it; the SourceList highlights
+ * the matching card and scrolls it into view. After a short delay we
+ * clear the highlight so the card doesn't stay "selected" forever.
+ *
  * The streaming cursor is part of the assistant message — a thin
  * inline caret that fades in/out as tokens arrive. We keep the visual
  * "weight" of the message low: no card backgrounds for assistant
@@ -38,6 +43,12 @@ interface MessageProps {
   className?: string;
 }
 
+/**
+ * How long the [n] chip's matching card stays highlighted. Long enough
+ * to read, short enough that the next interaction isn't blocked.
+ */
+const ACTIVE_CITATION_HIGHLIGHT_MS = 1600;
+
 export function Message({ message, isStreaming = false, className }: MessageProps) {
   const isUser = message.role === "user";
 
@@ -45,6 +56,32 @@ export function Message({ message, isStreaming = false, className }: MessageProp
   //   - concatenated text (for markdown rendering)
   //   - citations from any `data-sources` part
   const { text, citations } = React.useMemo(() => extractMessageData(message), [message]);
+
+  // The currently-highlighted citation index (1-based). Auto-clears
+  // after a short pause so a stale highlight doesn't linger.
+  const [activeCitation, setActiveCitation] = React.useState<number | null>(null);
+  const clearTimerRef = React.useRef<number | null>(null);
+
+  const handleCitationSelect = React.useCallback((index: number) => {
+    setActiveCitation(index);
+    if (clearTimerRef.current != null) {
+      window.clearTimeout(clearTimerRef.current);
+    }
+    clearTimerRef.current = window.setTimeout(() => {
+      setActiveCitation(null);
+    }, ACTIVE_CITATION_HIGHLIGHT_MS);
+  }, []);
+
+  // Cancel any pending clear on unmount so we don't setState on a dead
+  // component (and so a still-streaming message that disappears doesn't
+  // dangle a timer).
+  React.useEffect(() => {
+    return () => {
+      if (clearTimerRef.current != null) {
+        window.clearTimeout(clearTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <motion.article
@@ -84,8 +121,8 @@ export function Message({ message, isStreaming = false, className }: MessageProp
 
         {!isUser && citations.length > 0 ? (
           <div className="w-full">
-            <CitationChips count={citations.length} />
-            <SourceList citations={citations} />
+            <CitationChips count={citations.length} onSelect={handleCitationSelect} />
+            <SourceList citations={citations} activeIndex={activeCitation} />
           </div>
         ) : null}
       </div>
@@ -110,28 +147,29 @@ function Avatar({ role }: { role: UIMessage["role"] }) {
           : "border-foreground/10 bg-foreground/5 text-foreground"
       )}
     >
-      {isUser ? <User className="size-3.5" /> : <MastraMark />}
+      {isUser ? <User className="size-3.5" /> : <EurLexMark />}
     </div>
   );
 }
 
 /**
- * The Mastra "M" mark, hand-drawn as a single inline SVG so we don't pull
- * a logo file. Abstract enough to read as a brand mark, simple enough to
- * stay minimal.
+ * A small abstract mark for the assistant: a stylised "E" / column glyph
+ * that reads as a regulation doc, not a brand logo. Hand-drawn as a
+ * single inline SVG so we don't pull an asset.
  */
-function MastraMark() {
+function EurLexMark() {
   return (
     <svg
       viewBox="0 0 16 16"
       fill="none"
       className="size-4"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
     >
       <path
-        d="M3 13V3l10 10V3"
+        d="M3 2v12M3 8h6M3 2h7M3 14h7"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.4"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
