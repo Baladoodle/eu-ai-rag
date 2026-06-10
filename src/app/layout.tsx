@@ -1,18 +1,37 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import * as React from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * Typography choices for the EU AI Act expert:
+ *   - Inter (sans) — body, UI, controls. Reads as a refined modern
+ *     sans with strong legibility at small sizes (citation metadata,
+ *     article numbers in body).
+ *   - Source Serif 4 (serif) — article references and other "lawyerly"
+ *     touchpoints. Used as a secondary face so the document feels like
+ *     a regulation read, not a chat app.
+ *   - JetBrains Mono — code blocks, article numbers in the citation
+ *     cards, and tabular figures.
+ */
+const inter = Inter({
+  variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const sourceSerif = Source_Serif_4({
+  variable: "--font-serif",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -25,7 +44,7 @@ export const metadata: Metadata = {
  * Why className="dark": the chat UI is designed for the dark palette in
  * globals.css. We force the dark class so the look is consistent across
  * machines (and so a user with prefers-color-scheme=light still sees the
- * intended design — this is a portfolio piece, the theme is the brand).
+ * intended design — this is a portfolio piece, the theme is the brand.
  */
 export default function RootLayout({
   children,
@@ -35,7 +54,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${inter.variable} ${sourceSerif.variable} ${jetbrainsMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <TooltipProvider>{children}</TooltipProvider>
