@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mastra Expert",
+  title: "EU AI Act Expert",
   description:
-    "A RAG chatbot for the Mastra AI framework. Ask anything about Mastra.",
+    "A RAG chatbot for Regulation (EU) 2024/1689 (the EU AI Act). Ask about Articles, Recitals, Annexes, and Commission guidance.",
 };
 
 /**

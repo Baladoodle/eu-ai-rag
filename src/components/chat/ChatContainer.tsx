@@ -24,13 +24,13 @@ import { cn } from "@/lib/utils";
 
 import { useChatState } from "./hooks/useChatState";
 
-// 3-4 starter questions. Kept short, real-Mastra, and pointing at the
-// parts of the docs that have the densest signal in our corpus.
+// 3-4 starter questions. Kept short, real-EU-AI-Act, and pointing at the
+// parts of the regulation that have the densest signal in our corpus.
 const SUGGESTED_QUESTIONS = [
-  { id: "rag-overview", text: "What is RAG in Mastra and how do I get started?" },
-  { id: "pgvector", text: "How do I configure Mastra with pgvector?" },
-  { id: "rerank", text: "How does reranking work, and when should I use it?" },
-  { id: "embed", text: "How do I swap in a custom embedding model?" },
+  { id: "risk-classes", text: "What are the four risk categories in the EU AI Act?" },
+  { id: "high-risk", text: "How is a 'high-risk AI system' defined?" },
+  { id: "transparency", text: "What does Article 50 require of providers?" },
+  { id: "penalties", text: "What are the maximum fines under Article 99?" },
 ];
 
 export function ChatContainer() {
@@ -149,7 +149,7 @@ function Header({ onReset }: HeaderProps) {
             />
           </svg>
         </span>
-        <span className="text-sm font-medium tracking-tight">Mastra Expert</span>
+        <span className="text-sm font-medium tracking-tight">EU AI Act Expert</span>
       </div>
 
       {onReset ? (

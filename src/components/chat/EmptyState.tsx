@@ -36,13 +36,13 @@ export function EmptyState({ questions, onSelect, className }: EmptyStateProps) 
     >
       <div className="flex flex-col items-center gap-2">
         <span className="rounded-full border border-border/60 bg-card/40 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-          Mastra Expert
+          EU AI Act Expert
         </span>
         <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-          Ask anything about the Mastra framework.
+          Ask anything about Regulation (EU) 2024/1689.
         </h1>
         <p className="max-w-md text-pretty text-sm text-muted-foreground">
-          Cited answers, grounded in the official documentation.
+          Cited answers, grounded in the Articles, Recitals, and Annexes of the Act.
         </p>
       </div>
 
