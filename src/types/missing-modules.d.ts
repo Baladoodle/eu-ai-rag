@@ -55,3 +55,14 @@ declare module "@/lib/vector" {
   export function getVectorStore(): Promise<VectorStore>;
   export function _resetVectorStoreForTesting(): void;
 }
+
+declare module "jsdom" {
+  /**
+   * Minimal jsdom declaration. We only use `JSDOM`'s constructor to
+   * build a DOM for Readability, so the public surface is tiny.
+   */
+  export class JSDOM {
+    constructor(html: string);
+    window: { document: Document };
+  }
+}

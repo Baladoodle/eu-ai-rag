@@ -29,7 +29,6 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import cliProgress from "cli-progress";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const SingleBar = (cliProgress as unknown as { SingleBar: new (...args: unknown[]) => cliProgress.SingleBar }).SingleBar;
 
 import { log } from "@/lib/logger";
@@ -137,7 +136,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineResult
   const UPSERT_BATCH = 64;
   let written = 0;
   let skipped = 0;
-  let attempted = 0;
 
   if (dryRun) {
     log.warn({ skipped: embedded.length }, "pipeline.dryRun.skipUpsert");
@@ -149,7 +147,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineResult
       const summary = await writer.upsert(batch);
       written += summary.written;
       skipped += summary.skipped;
-      attempted += summary.attempted;
       for (const row of batch) state.markSeen(row.text);
       bar?.update(Math.floor(i / UPSERT_BATCH) + 1);
     }

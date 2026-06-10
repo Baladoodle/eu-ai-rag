@@ -50,7 +50,7 @@ describe("guidance scraper (repurposed 'issues')", () => {
           <p>Why do we need to regulate AI? Because...</p>
         </main>
       </body></html>`;
-    globalThis.fetch = vi.fn(async (url: any) => {
+    globalThis.fetch = vi.fn(async () => {
       return htmlResponse(HTML);
     }) as unknown as typeof fetch;
 
@@ -65,7 +65,7 @@ describe("guidance scraper (repurposed 'issues')", () => {
 
   it("respects the --limit cap and returns that many pages in order", async () => {
     const HTML = `<html><body><main><p>${"x".repeat(400)}</p></main></body></html>`;
-    globalThis.fetch = vi.fn(async (url: any) => {
+    globalThis.fetch = vi.fn(async () => {
       return htmlResponse(HTML);
     }) as unknown as typeof fetch;
 

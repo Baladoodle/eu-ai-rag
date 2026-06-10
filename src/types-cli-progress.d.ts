@@ -8,13 +8,11 @@
  *   only use two of its methods.
  */
 declare module "cli-progress" {
-  export interface SingleBar {
-    start(total: number, startValue: number): void;
-    update(value: number): void;
-    stop(): void;
-  }
   export const Presets: { shades_classic: unknown };
   export class SingleBar {
     constructor(format: unknown, preset: unknown);
+    start(total: number, startValue: number): void;
+    update(value: number): void;
+    stop(): void;
   }
 }

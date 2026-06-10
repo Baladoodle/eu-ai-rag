@@ -43,6 +43,7 @@
  */
 import {
   streamText,
+  createUIMessageStream,
   type AsyncIterableStream,
   type ModelMessage,
   type UIMessageChunk,
@@ -199,7 +200,7 @@ export async function generate(
   if (!hasAnthropicCredentials() && process.env.MOCK !== "1") {
     log.warn("generation.mockFallback.noCredentials");
     return {
-      stream: buildMockAnswerStream(options, citations) as unknown as GenerationOutput["stream"],
+      stream: buildMockAnswerStream(options) as unknown as GenerationOutput["stream"],
       citations,
       modelId: "mock-local",
     };
@@ -307,7 +308,6 @@ function serializeError(err: unknown): Record<string, unknown> {
  */
 function buildMockAnswerStream(
   options: GenerateOptions,
-  _citations: GenerationOutput["citations"],
 ): ReadableStream<unknown> {
   // Build the answer from the retrieved chunks. We use the chunk text
   // verbatim (truncated) and cite each chunk by index, exactly as the
@@ -336,7 +336,6 @@ function buildMockAnswerStream(
   // We reuse `createUIMessageStream` so the wire format matches the
   // real path exactly. The casts through `unknown` are necessary
   // because our local types are a strict subset of the SDK's union.
-  const { createUIMessageStream } = require("ai") as typeof import("ai");
   return createUIMessageStream({
     execute: async ({ writer }) => {
       const messageId = `mock-${Date.now()}`;

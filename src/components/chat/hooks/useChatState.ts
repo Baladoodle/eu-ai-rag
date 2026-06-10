@@ -27,6 +27,30 @@ export type ChatErrorPayload = {
   message: string;
 };
 
+/**
+ * Walk a message list backwards and return the most recent `data-error`
+ * payload, or null if none. Why a free function (and not inline in the
+ * hook): React Compiler's manual-memoization check requires the body
+ * to be recognizable as a pure derivation of the inputs. Pulling the
+ * walk out of the hook lets us use plain `useMemo` semantics without
+ * fighting the compiler.
+ */
+function findLatestError(messages: ReadonlyArray<UIMessage>): ChatErrorPayload | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message) continue;
+    for (const part of message.parts) {
+      if (isDataUIPart(part) && part.type === "data-error") {
+        const data = part.data as { code?: string; message?: string };
+        if (data.code && data.message) {
+          return { code: data.code, message: data.message };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export interface UseChatStateResult {
   messages: UIMessage[];
   /** ID of the assistant message that is currently streaming, or null. */
@@ -49,19 +73,21 @@ export interface UseChatStateResult {
 
 export function useChatState(): UseChatStateResult {
   // Generate a stable id per browser session so the backend can correlate
-  // log lines. No PII, no auth — just a correlation key.
-  const sessionIdRef = React.useRef<string | null>(null);
-  if (sessionIdRef.current === null && typeof crypto !== "undefined") {
-    sessionIdRef.current = crypto.randomUUID();
-  }
+  // log lines. No PII, no auth — just a correlation key. Lazily initialise
+  // in state so the first render has the id available without touching
+  // the ref during render (refs are only safe to read inside effects /
+  // event handlers under React's rules of hooks).
+  const [sessionId] = React.useState<string>(() =>
+    typeof crypto !== "undefined" ? crypto.randomUUID() : "no-crypto",
+  );
 
   const transport = React.useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { sessionId: sessionIdRef.current ?? undefined },
+        body: { sessionId },
       }),
-    []
+    [sessionId]
   );
 
   const chat = useChat({
@@ -83,21 +109,10 @@ export function useChatState(): UseChatStateResult {
   // Walk the message list for the most recent `data-error` part. We don't
   // pop errors from the message — that would lose streaming state — we
   // just surface the latest one for the banner.
-  const error = React.useMemo<ChatErrorPayload | null>(() => {
-    for (let i = chat.messages.length - 1; i >= 0; i--) {
-      const message = chat.messages[i];
-      if (!message) continue;
-      for (const part of message.parts) {
-        if (isDataUIPart(part) && part.type === "data-error") {
-          const data = part.data as { code?: string; message?: string };
-          if (data.code && data.message) {
-            return { code: data.code, message: data.message };
-          }
-        }
-      }
-    }
-    return null;
-  }, [chat.messages]);
+  const error = React.useMemo<ChatErrorPayload | null>(
+    () => findLatestError(chat.messages),
+    [chat.messages],
+  );
 
   const isInitialLoading =
     chat.status === "submitted" && chat.messages.length === 0;

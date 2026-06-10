@@ -24,7 +24,7 @@ const RAW_DIR = path.resolve(process.cwd(), "data", "raw");
 const realFetch = globalThis.fetch;
 
 function mockFetchOnce(responder: (url: string) => Response | Promise<Response>) {
-  const spy = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+  const spy = vi.fn(async (url: string | URL | Request) => {
     const u = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
     return responder(u);
   });
@@ -103,7 +103,7 @@ describe("docs scraper (EU AI Act)", () => {
 
   it("logs and continues past a 4xx error", async () => {
     let i = 0;
-    mockFetchOnce((url) => {
+    mockFetchOnce(() => {
       i++;
       // 4xx is permanent — p-retry aborts after the first failure
       return new Response("not found", { status: 404, statusText: "Not Found" });
@@ -126,7 +126,7 @@ describe("htmlToMarkdown helper", () => {
         <footer>the bottom</footer>
       </body></html>`;
     const { htmlToMarkdown } = await import("@/ingestion/scrapers/_shared");
-    const { markdown, title } = htmlToMarkdown(HTML, "https://example.com/");
+    const { markdown } = htmlToMarkdown(HTML, "https://example.com/");
     expect(markdown).toContain("Real content");
     expect(markdown).not.toContain("navigation");
     expect(markdown).not.toContain("alert(1)");

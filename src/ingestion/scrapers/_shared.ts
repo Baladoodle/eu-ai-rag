@@ -16,6 +16,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readability } from "@mozilla/readability";
 import * as cheerio from "cheerio";
+import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import pRetry, { AbortError } from "p-retry";
 
@@ -129,12 +130,16 @@ export async function persistRaw(namespace: string, filename: string, body: stri
  * page, we degrade to a more permissive extraction.
  */
 export function htmlToMarkdown(html: string, url: string): { markdown: string; title?: string } {
+  // `url` is currently unused at runtime — we keep it in the signature
+  // for call-site readability (the URL often explains what page is
+  // being parsed) and to leave room for future use (e.g. canonical
+  // URL injection into the markdown).
+  void url;
   const dom = cheerio.load(html);
   // Readability wants a real DOM Document, not a cheerio wrapper. We
   // build a minimal DOMDocument from the cheerio root by extracting
   // the HTML. Cheerio's `dom.html()` returns the serialized root.
   const serialized = dom.html();
-  const { JSDOM } = require("jsdom") as { JSDOM: new (html: string) => { window: { document: Document } } };
   const jsdom = new JSDOM(serialized);
   const parsed = new Readability(jsdom.window.document).parse();
 

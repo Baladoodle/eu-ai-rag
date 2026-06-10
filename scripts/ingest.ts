@@ -19,7 +19,6 @@ import { main } from "../src/ingestion/cli";
 main().then(
   (code) => process.exit(code),
   (err) => {
-    // eslint-disable-next-line no-console
     console.error("ingest: unhandled error", err);
     process.exit(1);
   },
