@@ -1,144 +1,121 @@
 /**
  * ingestion/scrapers/source.ts
  * ----------------------------------------------------------------------------
- * Scraper for the Mastra GitHub source: READMEs, AGENTS.md, and key
- * package source files. We hit the raw.githubusercontent.com URLs
- * directly so we get the raw `.md` or `.ts` content, not an HTML
- * wrapper around it.
+ * Scraper for the Annexes (I-XIII) of the EU AI Act.
  *
  * Why this exists (educational note for someone new to RAGs):
- *   Documentation tells you WHAT a framework does. Source code tells
- *   you HOW — and for developer questions, the exact API signature
- *   ("does the third arg default to true?") is the difference between
- *   a useful and a useless answer.
+ *   Annexes are the structured appendices to Regulation (EU) 2024/1689
+ *   and contain lists, criteria, and procedural detail that the Articles
+ *   reference. Examples:
+ *     - Annex I: the technical AI-system definition checklist
+ *     - Annex III: the high-risk use cases (the long list everyone cites)
+ *     - Annex IV: the technical documentation requirements for high-risk
+ *     - Annex XII: the transparency obligations for deployers
  *
- *   We deliberately cap the file list to a hand-picked set (see
- *   `data-sources.md` Tier 2) because ingesting the whole repo would
- *   drown the signal in test fixtures, type definitions of unrelated
- *   packages, and the like.
+ *   We scrape one Annex per page from the Commission's AI Act Service
+ *   Desk (https://ai-act-service-desk.ec.europa.eu/en/ai-act/annex-N),
+ *   which exposes them in a stable, scrape-friendly layout.
+ *
+ *   This scraper replaces the former "Mastra GitHub source files" scraper.
+ *   The `source` keyword in the CLI flag is kept for backward compatibility
+ *   with the pipeline's `--source=source` switch — we just point it at a
+ *   different kind of source.
  * ----------------------------------------------------------------------------
  */
 import { log } from "@/lib/logger";
-import { env } from "@/lib/env";
 import type { RawDocument } from "../types";
-import { fetchText, persistRaw, slugifyPath } from "./_shared";
+import { fetchText, htmlToMarkdown, persistRaw } from "./_shared";
 
 /**
- * The hand-picked list of repo paths to ingest. We list both READMEs
- * (high-level, always safe) and a small set of "packages/<name>/src/*.ts"
- * files where the public API surface lives. If you add a file here,
- * add an eval case too — otherwise we have no way to know it helped.
+ * The 13 Annexes of the AI Act. Numbered I-XIII in the official text; we
+ * use their ordinal position (1..13) for the URL slug.
  */
-const REPO_PATHS: ReadonlyArray<string> = [
-  // Top-level
-  "README.md",
-  "AGENTS.md",
-  "CLAUDE.md",
-  // Package READMEs
-  "packages/core/README.md",
-  "packages/rag/README.md",
-  "packages/pg/README.md",
-  "packages/cli/README.md",
-  "packages/deployer/README.md",
-  // Source files (API surface only)
-  "packages/rag/src/index.ts",
-  "packages/rag/src/document.ts",
-  "packages/rag/src/chunk/index.ts",
-  "packages/rag/src/embeddings/index.ts",
-  "packages/rag/src/rerank/index.ts",
-  "packages/pg/src/vector.ts",
-  "packages/pg/src/index.ts",
-  "packages/core/src/llm/model/router.ts",
-  "packages/core/src/agent/index.ts",
-  "packages/core/src/tools/vector-query.ts",
+const ANNEXES: ReadonlyArray<{ ordinal: number; roman: string; title: string }> = [
+  { ordinal: 1, roman: "I", title: "Annex I — Union Harmonisation Legislation" },
+  { ordinal: 2, roman: "II", title: "Annex II — Information to be Submitted for High-Risk AI System Registration" },
+  { ordinal: 3, roman: "III", title: "Annex III — High-Risk AI Systems Referred to in Article 6(3)" },
+  { ordinal: 4, roman: "IV", title: "Annex IV — Technical Documentation (High-Risk AI Systems)" },
+  { ordinal: 5, roman: "V", title: "Annex V — EU Declaration of Conformity" },
+  { ordinal: 6, roman: "VI", title: "Annex VI — Conformity Assessment Procedure (Internal Control)" },
+  { ordinal: 7, roman: "VII", title: "Annex VII — Conformity Assessment Based on Assessment of Quality Management System and Assessment of Technical Documentation" },
+  { ordinal: 8, roman: "VIII", title: "Annex VIII — Information to be Submitted for Registration of High-Risk AI Systems" },
+  { ordinal: 9, roman: "IX", title: "Annex IX — Information to be Submitted for Registration of High-Risk AI Systems Listed in Annex III" },
+  { ordinal: 10, roman: "X", title: "Annex X — Union Legislative Acts on Fundamental Rights" },
+  { ordinal: 11, roman: "XI", title: "Annex XI — Technical Documentation for GPAI Models (Pre-trained)" },
+  { ordinal: 12, roman: "XII", title: "Annex XII — Transparency Information for Deployers" },
+  { ordinal: 13, roman: "XIII", title: "Annex XIII — Criteria for Designation of High-Risk AI Systems" },
 ];
 
-/** Size cap. Files larger than this are skipped — we don't want to embed
- *  generated bundles or massive type files. */
-const MAX_BYTES = 50_000;
-
-const REPO = "mastra-ai/mastra";
-const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/${env.MASTRA_REF}/`;
+const BASE_URL = "https://ai-act-service-desk.ec.europa.eu/en/ai-act/";
+const EUR_LEX_CANONICAL = "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689";
 
 /**
- * Build a stable `sourceId` from a repo path. We strip the leading
- * `packages/<name>/src/` to keep ids short, but keep the file name
- * so two files with the same name in different packages don't collide.
+ * Build a stable `sourceId` for an annex, e.g. `ai-act/annex-3`.
  */
-function buildSourceId(repoPath: string): string {
-  const slug = slugifyPath(repoPath).replace(/\.ts$|\.md$/g, "");
-  return `mastra-src/${slug}`;
+function buildSourceId(ordinal: number): string {
+  return `ai-act/annex-${ordinal}`;
 }
 
-/**
- * Heuristic title for a repo file. Prefer the first H1 in markdown
- * (we don't parse the file — too expensive) and fall back to the
- * file basename.
- */
-function inferTitle(repoPath: string): string {
-  const base = repoPath.split("/").pop() ?? repoPath;
-  return base.replace(/\.(ts|md)$/, "");
-}
+async function scrapeOne(annex: { ordinal: number; roman: string; title: string }): Promise<RawDocument | null> {
+  const url = `${BASE_URL}annex-${annex.ordinal}`;
+  const sourceId = buildSourceId(annex.ordinal);
 
-async function scrapeOne(repoPath: string): Promise<RawDocument | null> {
-  const url = `${RAW_BASE}${repoPath}`;
-  const sourceId = buildSourceId(repoPath);
-
-  const text = await fetchText(url);
-
-  // Apply the size cap AFTER fetching (no HEAD request). If a file
-  // grows past 50KB we want a loud log line, not a silent truncation.
-  if (text.length > MAX_BYTES) {
-    log.warn({ sourceId, len: text.length, max: MAX_BYTES }, "scrape.source.tooLarge");
+  let html: string;
+  try {
+    html = await fetchText(url);
+  } catch (err) {
+    log.warn({ sourceId, url, err: String(err) }, "scrape.annex.fetchFailed");
     return null;
   }
 
-  // Flatten slashes in the filename so we don't create nested
-  // directories inside data/raw/source/.
-  const safe = (slugifyPath(repoPath) || "root").replace(/\//g, "__");
-  const filename = `${safe}.txt`;
-  await persistRaw("source", filename, text);
+  const filename = `annex-${annex.ordinal}.html`;
+  await persistRaw("annexes", filename, html);
 
-  if (text.trim().length < 50) {
-    log.warn({ sourceId, url, len: text.length }, "scrape.source.empty");
+  const { markdown, title } = htmlToMarkdown(html, url);
+
+  if (markdown.trim().length < 100) {
+    log.warn({ sourceId, url, len: markdown.length }, "scrape.annex.empty");
     return null;
   }
 
   return {
     sourceId,
     url,
-    title: inferTitle(repoPath),
-    text,
-    kind: "source",
+    title: title ?? annex.title,
+    text: markdown,
+    kind: "docs",
     metadata: {
-      origin: "github.com/mastra-ai/mastra",
-      ref: env.MASTRA_REF,
-      repoPath,
+      origin: "ai-act-service-desk.ec.europa.eu",
+      canonical: EUR_LEX_CANONICAL,
+      annexOrdinal: annex.ordinal,
+      annexRoman: annex.roman,
+      kind: "annex",
       scrapedAt: new Date().toISOString(),
     },
   };
 }
 
 /**
- * Scrape the curated repo file list. Errors are logged and skipped —
- * the KB is best-effort; a missing file is degraded, not fatal.
+ * Scrape all 13 Annexes. `--limit` caps the count for dev/testing.
  */
 export async function scrapeSource(opts: { limit?: number } = {}): Promise<RawDocument[]> {
-  const paths = opts.limit ? REPO_PATHS.slice(0, opts.limit) : REPO_PATHS;
+  const toFetch = opts.limit ? ANNEXES.slice(0, opts.limit) : ANNEXES;
   const out: RawDocument[] = [];
 
-  for (const repoPath of paths) {
+  log.info({ count: toFetch.length }, "scrape.annexes.start");
+
+  for (const annex of toFetch) {
     try {
-      const doc = await scrapeOne(repoPath);
+      const doc = await scrapeOne(annex);
       if (doc) {
         out.push(doc);
-        log.info({ sourceId: doc.sourceId, len: doc.text.length }, "scrape.source.file");
+        log.info({ sourceId: doc.sourceId, len: doc.text.length }, "scrape.annex.page");
       }
     } catch (err) {
-      log.error({ err: String(err), repoPath }, "scrape.source.failed");
+      log.error({ err: String(err), annex: annex.ordinal }, "scrape.annex.failed");
     }
   }
 
-  log.info({ scraped: out.length, attempted: paths.length }, "scrape.source.done");
+  log.info({ scraped: out.length, attempted: toFetch.length }, "scrape.annexes.done");
   return out;
 }
