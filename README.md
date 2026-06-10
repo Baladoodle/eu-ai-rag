@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# mastra-expert
 
-## Getting Started
+A production-grade RAG chatbot that answers developer questions about the [Mastra AI framework](https://mastra.ai), built as a freelance portfolio piece.
 
-First, run the development server:
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+nvm use            # Node 20
+npm install
+MOCK=1 npm run dev # no API keys required
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+For a full understanding of the architecture, phased build plan, and file ownership, see:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — stack decisions, data flow, eval strategy.
+- [.claude/PLAN.md](./.claude/PLAN.md) — phased build plan with per-agent ownership.
+- [.claude/FILE-OWNERSHIP.md](./.claude/FILE-OWNERSHIP.md) — who owns which file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Deployment instructions will be added in a later phase — see the Deploy section placeholder below.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+- `npm run dev` — Next.js dev server.
+- `npm run build` — production build.
+- `npm test` — Vitest unit + integration tests.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+_Filled in by the e2e-agent in Phase 10._
