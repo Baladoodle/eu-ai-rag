@@ -1,303 +1,308 @@
 {
   "$schema": "./questions.schema.json",
   "version": "1.0.0",
-  "description": "20 Q&A pairs that exercise the mastra-expert RAG. Each case is hand-written after reading the official Mastra docs (https://mastra.ai/docs). Categories are balanced and difficulty is split 8 easy / 8 medium / 4 hard. Run with: npm run eval.",
+  "description": "20 Q&A pairs that exercise the eu-ai-act-expert RAG over Regulation (EU) 2024/1689. Each case is hand-written after reading the official text (https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689). Categories reflect EU AI Act topics; difficulty is split 8 easy / 8 medium / 4 hard. Run with: npm run eval -- --mock.",
   "cases": [
     {
       "id": "q01",
-      "category": "agents",
+      "category": "risk-classification",
       "difficulty": "easy",
-      "question": "What is Mastra and what are its main features?",
+      "question": "What are the four risk categories used by the EU AI Act?",
       "expectedSources": [
-        "https://mastra.ai/docs",
-        "https://mastra.ai/docs/agents/overview"
+        "https://artificialintelligenceact.eu/article/50/",
+        "https://artificialintelligenceact.eu/article/5/"
       ],
       "expectedTopics": [
-        "agents",
-        "workflows",
-        "RAG",
-        "TypeScript framework"
+        "unacceptable risk",
+        "high risk",
+        "limited risk",
+        "minimal risk"
       ]
     },
     {
       "id": "q02",
-      "category": "agents",
+      "category": "risk-classification",
       "difficulty": "easy",
-      "question": "How do I create a basic Mastra agent?",
+      "question": "Which AI practices are prohibited under Article 5 of the AI Act?",
       "expectedSources": [
-        "https://mastra.ai/docs/agents/overview"
+        "https://artificialintelligenceact.eu/article/5/"
       ],
       "expectedTopics": [
-        "createAgent",
-        "model",
-        "instructions",
-        "generate"
+        "subliminal",
+        "manipulation",
+        "exploitation",
+        "social scoring",
+        "real-time remote biometric identification"
       ]
     },
     {
       "id": "q03",
-      "category": "rag",
+      "category": "risk-classification",
       "difficulty": "easy",
-      "question": "What are the main steps in a Mastra RAG pipeline?",
+      "question": "What is a 'high-risk AI system' under the AI Act?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/overview"
+        "https://artificialintelligenceact.eu/article/6/",
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
-        "chunk",
-        "embed",
-        "store",
-        "query"
+        "Annex III",
+        "safety component",
+        "regulated product"
       ]
     },
     {
       "id": "q04",
-      "category": "rag",
+      "category": "definitions",
       "difficulty": "easy",
-      "question": "Which package provides MDocument for chunking?",
+      "question": "How does Article 3 define an 'AI system'?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/overview"
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
-        "@mastra/rag",
-        "MDocument",
-        "chunk"
+        "machine-based",
+        "autonomy",
+        "infers",
+        "predictions",
+        "decisions"
       ]
     },
     {
       "id": "q05",
-      "category": "tools",
+      "category": "definitions",
       "difficulty": "easy",
-      "question": "How do I give an agent a custom tool in Mastra?",
+      "question": "What is the legal definition of a 'provider' of an AI system?",
       "expectedSources": [
-        "https://mastra.ai/docs/agents/overview"
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
-        "createTool",
-        "tools array",
-        "agent"
+        "places on the market",
+        "puts into service",
+        "own name or trademark"
       ]
     },
     {
       "id": "q06",
-      "category": "memory",
+      "category": "provider-obligations",
       "difficulty": "easy",
-      "question": "How does Mastra memory keep track of conversations?",
+      "question": "What are the main obligations of a provider of a high-risk AI system?",
       "expectedSources": [
-        "https://mastra.ai/docs/memory/overview"
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
-        "resource",
-        "thread",
-        "Memory"
+        "risk management",
+        "data governance",
+        "technical documentation",
+        "post-market monitoring"
       ]
     },
     {
       "id": "q07",
-      "category": "workflows",
-      "difficulty": "easy",
-      "question": "What is a step in a Mastra workflow?",
+      "category": "provider-obligations",
+      "difficulty": "medium",
+      "question": "When is a provider required to register a high-risk AI system in the EU database?",
       "expectedSources": [
-        "https://mastra.ai/docs/workflows/overview"
+        "https://artificialintelligenceact.eu/article/49/",
+        "https://artificialintelligenceact.eu/article/71/"
       ],
       "expectedTopics": [
-        "createStep",
-        "inputSchema",
-        "outputSchema",
-        "execute"
+        "EU database",
+        "before placing on the market",
+        "Annex VIII"
       ]
     },
     {
       "id": "q08",
-      "category": "deployment",
+      "category": "deployer-obligations",
       "difficulty": "easy",
-      "question": "Can I deploy a Mastra app to Vercel?",
+      "question": "What is a 'deployer' of an AI system under the AI Act?",
       "expectedSources": [
-        "https://mastra.ai/docs/deployment/overview"
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
-        "Vercel",
-        "deployer",
-        "build"
+        "under its authority",
+        "natural or legal person",
+        "personal non-professional activity"
       ]
     },
     {
       "id": "q09",
-      "category": "rag",
+      "category": "deployer-obligations",
       "difficulty": "medium",
-      "question": "How do I configure Mastra to use pgvector for storage?",
+      "question": "What are the obligations of a deployer of a high-risk AI system under Article 26?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/vector-databases",
-        "https://mastra.ai/docs/rag/overview"
+        "https://artificialintelligenceact.eu/article/26/"
       ],
       "expectedTopics": [
-        "PgVector",
-        "@mastra/pg",
-        "connection string",
-        "createIndex"
+        "human oversight",
+        "monitor operation",
+        "inform workers",
+        "fundamental rights impact assessment"
       ]
     },
     {
       "id": "q10",
-      "category": "rag",
+      "category": "high-risk-requirements",
       "difficulty": "medium",
-      "question": "How do I filter vector query results by metadata in Mastra?",
+      "question": "What requirements apply to high-risk AI systems regarding data quality under Article 10?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/retrieval"
+        "https://artificialintelligenceact.eu/article/10/"
       ],
       "expectedTopics": [
-        "filter",
-        "metadata",
-        "MongoDB-style operators"
+        "training data",
+        "validation data",
+        "testing data",
+        "bias",
+        "representative"
       ]
     },
     {
       "id": "q11",
-      "category": "agents",
+      "category": "high-risk-requirements",
       "difficulty": "medium",
-      "question": "How does Mastra's model router work, and what is the format for model IDs?",
+      "question": "What does the AI Act require regarding human oversight of high-risk AI systems?",
       "expectedSources": [
-        "https://mastra.ai/docs/agents/overview"
+        "https://artificialintelligenceact.eu/article/14/"
       ],
       "expectedTopics": [
-        "ModelRouterEmbeddingModel",
-        "provider/model-name",
-        "model router"
+        "human oversight",
+        "intervene",
+        "override",
+        "explainability"
       ]
     },
     {
       "id": "q12",
-      "category": "rag",
-      "difficulty": "medium",
-      "question": "What rerankers does Mastra support, and when should I use one?",
+      "category": "transparency",
+      "difficulty": "easy",
+      "question": "What are the transparency obligations for providers and deployers under Article 50?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/retrieval"
+        "https://artificialintelligenceact.eu/article/50/"
       ],
       "expectedTopics": [
-        "MastraAgentRelevanceScorer",
-        "CohereRelevanceScorer",
-        "rerank"
+        "deep fake",
+        "AI-generated content",
+        "inform natural persons",
+        "emotion recognition",
+        "biometric categorization"
       ]
     },
     {
       "id": "q13",
-      "category": "integrations",
+      "category": "transparency",
       "difficulty": "medium",
-      "question": "Which chunking strategies does MDocument support and what are the trade-offs?",
+      "question": "When must a chatbot or conversational AI system disclose that the user is interacting with an AI?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/overview"
+        "https://artificialintelligenceact.eu/article/50/"
       ],
       "expectedTopics": [
-        "recursive",
-        "sliding window",
-        "overlap",
-        "size"
+        "Article 50(1)",
+        "clear and distinguishable",
+        "natural persons"
       ]
     },
     {
       "id": "q14",
-      "category": "memory",
+      "category": "gpai",
       "difficulty": "medium",
-      "question": "What is working memory in Mastra and how is it different from message history?",
+      "question": "How does the AI Act define a 'general-purpose AI model' (GPAI)?",
       "expectedSources": [
-        "https://mastra.ai/docs/memory/working-memory"
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
-        "working memory",
-        "resource-scoped",
-        "thread-scoped",
-        "system prompt"
+        "self-supervision",
+        "large amount of data",
+        "significant generality",
+        "downstream tasks"
       ]
     },
     {
       "id": "q15",
-      "category": "workflows",
-      "difficulty": "medium",
-      "question": "How do I run workflow steps in parallel in Mastra?",
+      "category": "gpai",
+      "difficulty": "hard",
+      "question": "What additional obligations apply to GPAI models classified as having 'systemic risk' under Article 55?",
       "expectedSources": [
-        "https://mastra.ai/docs/workflows/overview"
+        "https://artificialintelligenceact.eu/article/55/"
       ],
       "expectedTopics": [
-        "parallel",
-        "control flow",
-        ".then"
+        "10^25 FLOPs",
+        "model evaluation",
+        "serious incident",
+        "cybersecurity"
       ]
     },
     {
       "id": "q16",
-      "category": "integrations",
+      "category": "timeline",
       "difficulty": "medium",
-      "question": "Which vector stores does Mastra support out of the box?",
+      "question": "When does the EU AI Act become fully applicable, and what is the timeline for its provisions?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/vector-databases"
+        "https://artificialintelligenceact.eu/article/113/"
       ],
       "expectedTopics": [
-        "Pinecone",
-        "Qdrant",
-        "MongoDB",
-        "Chroma"
+        "2 February 2025",
+        "2 August 2025",
+        "2 August 2026",
+        "2 August 2027"
       ]
     },
     {
       "id": "q17",
-      "category": "rag",
-      "difficulty": "hard",
-      "question": "Walk me through building a production RAG pipeline in Mastra with custom embedding models, pgvector, and reranking. Include the exact imports.",
+      "category": "enforcement",
+      "difficulty": "medium",
+      "question": "What are the maximum administrative fines for infringements of the AI Act under Article 99?",
       "expectedSources": [
-        "https://mastra.ai/docs/rag/overview",
-        "https://mastra.ai/docs/rag/retrieval",
-        "https://mastra.ai/docs/rag/vector-databases"
+        "https://artificialintelligenceact.eu/article/99/"
       ],
       "expectedTopics": [
-        "MDocument",
-        "embedMany",
-        "PgVector",
-        "rerank",
-        "imports"
+        "35 million",
+        "15 million",
+        "7.5 million",
+        "turnover"
       ]
     },
     {
       "id": "q18",
-      "category": "agents",
+      "category": "conformity-assessment",
       "difficulty": "hard",
-      "question": "How do I stream tokens from a Mastra agent and handle tool calls mid-stream?",
+      "question": "What are the conformity assessment procedures for high-risk AI systems under Article 43?",
       "expectedSources": [
-        "https://mastra.ai/docs/agents/overview"
+        "https://artificialintelligenceact.eu/article/43/"
       ],
       "expectedTopics": [
-        "stream",
-        "tool calls",
-        "tokens",
-        "events"
+        "internal control",
+        "notified body",
+        "Annex VI",
+        "Annex VII"
       ]
     },
     {
       "id": "q19",
-      "category": "memory",
+      "category": "gdpr-cross-ref",
       "difficulty": "hard",
-      "question": "How do I implement observational memory for very long conversations in Mastra, and when does it kick in?",
+      "question": "How does the AI Act relate to the GDPR, and what does Recital 10 say about their interaction?",
       "expectedSources": [
-        "https://mastra.ai/docs/memory/overview"
+        "https://artificialintelligenceact.eu/recital/10/"
       ],
       "expectedTopics": [
-        "observational memory",
-        "background agents",
-        "compression",
-        "context window"
+        "GDPR",
+        "Regulation 2016/679",
+        "complement",
+        "lex specialis"
       ]
     },
     {
       "id": "q20",
-      "category": "general",
+      "category": "post-market",
       "difficulty": "hard",
-      "question": "How do I deploy a Mastra workflow that uses Inngest for retries and durable execution?",
+      "question": "What post-market monitoring obligations do providers of high-risk AI systems have under Article 72?",
       "expectedSources": [
-        "https://mastra.ai/docs/deployment/overview"
+        "https://artificialintelligenceact.eu/article/72/"
       ],
       "expectedTopics": [
-        "Inngest",
-        "retries",
-        "durable execution",
-        "workflows"
+        "post-market monitoring",
+        "proactive",
+        "systematic",
+        "incident reporting"
       ]
     }
   ]

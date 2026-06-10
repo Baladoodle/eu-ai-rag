@@ -7,7 +7,21 @@
     "id": { "type": "string", "pattern": "^q[0-9]{2,}$" },
     "category": {
       "type": "string",
-      "enum": ["agents", "workflows", "rag", "tools", "memory", "deployment", "integrations", "general"]
+      "enum": [
+        "risk-classification",
+        "definitions",
+        "provider-obligations",
+        "deployer-obligations",
+        "high-risk-requirements",
+        "transparency",
+        "gpai",
+        "timeline",
+        "enforcement",
+        "conformity-assessment",
+        "gdpr-cross-ref",
+        "post-market",
+        "general"
+      ]
     },
     "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
     "question": { "type": "string", "minLength": 5 },
