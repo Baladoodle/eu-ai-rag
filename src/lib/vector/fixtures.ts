@@ -1,7 +1,7 @@
 /**
  * src/lib/vector/fixtures.ts
  * ----------------------------------------------------------------------------
- * A small, hand-written set of Mastra "documents" used as the seed
+ * A small, hand-written set of EU AI Act "documents" used as the seed
  * corpus in dev and in tests when no real embeddings are available.
  *
  * Why this file exists (educational note for someone new to RAGs):
@@ -11,8 +11,11 @@
  *   even when the corpus is empty.
  *
  *   The fixtures are:
- *     1. Real Mastra content (paraphrased from public docs).
- *     2. Hand-written, not scraped (so we don't ship copyrighted text).
+ *     1. Real EU AI Act content (paraphrased from the official text).
+ *        We never ship copyrighted verbatim quotes — every entry is
+ *        written in our own words.
+ *     2. Hand-written, not scraped (so we don't depend on a working
+ *        ingest pipeline to demo the app).
  *     3. A handful, not hundreds (the local embedder is a hash function;
  *        quality doesn't scale).
  *
@@ -76,9 +79,15 @@ function localEmbed(text: string): number[] {
  * in the "## Sources" block; the `title` is what the UI shows in
  * the source list.
  *
- * Why we mix docs and code:
- *   A "Mastra expert" should be able to answer both "what is RAG?" and
- *   "how do I call PgVector.query?". The mix is intentional.
+ * Why we mix Articles, Recitals, Annexes, and Commission guidance:
+ *   The chatbot should be able to answer both "what does Article 50
+ *   require?" (Article lookup) and "how does the Act relate to GDPR?"
+ *   (cross-referencing + Recital rationale). The mix is intentional.
+ *
+ * Why the source IDs mirror the production format:
+ *   `ai-act/article-N` and `ai-act/recital-N` are exactly what the
+ *   scraper in `docs.ts` will produce, so the eval cases work against
+ *   either the fixtures or the production corpus without changes.
  */
 const FIXTURE_DOCS: ReadonlyArray<{
   id: string;
@@ -88,74 +97,74 @@ const FIXTURE_DOCS: ReadonlyArray<{
   text: string;
 }> = [
   {
-    id: "mastra-docs/rag/overview#chunk-0",
-    url: "https://mastra.ai/docs/rag/overview",
-    title: "Mastra RAG Overview",
-    section: "What is RAG",
-    text: "Retrieval-Augmented Generation (RAG) is a pattern that grounds LLM responses in retrieved documents. Mastra provides first-class RAG primitives so you can move from a few prototype prompts to a production system without rebuilding the plumbing. The pipeline is: chunk your documents, embed them, store in a vector store, and at query time retrieve the top-K most similar chunks to ground the LLM's response.",
+    id: "ai-act/article-3#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/3/",
+    title: "Article 3 — Definitions",
+    section: "AI system",
+    text: "Under Article 3(1) of Regulation (EU) 2024/1689, an 'AI system' is a machine-based system that is designed to operate with varying levels of autonomy and that may exhibit adaptiveness after deployment, and that, for explicit or implicit objectives, infers, from the input it receives, how to generate outputs such as predictions, content, recommendations, or decisions that can influence physical or virtual environments. Article 3(3) defines a 'provider' as a natural or legal person, public authority, agency or other body that develops an AI system or a general-purpose AI model, or that has one developed, and places it on the market or puts it into service under its own name or trademark. Article 3(4) defines a 'deployer' as a natural or legal person, public authority, agency or other body using an AI system under its authority, except where the AI system is used in the course of a personal non-professional activity.",
   },
   {
-    id: "mastra-docs/rag/vector-databases#chunk-0",
-    url: "https://mastra.ai/docs/rag/vector-databases",
-    title: "Vector Databases",
-    section: "pgvector",
-    text: "Mastra ships an adapter for pgvector, the open-source vector store that lives inside Postgres. Using pgvector means you can co-locate vectors with the rest of your application's data and avoid running a second database. The PgVector class implements the same VectorStore interface as the in-memory store, so swapping backends is a one-line change. For local development without Postgres, use the in-memory store: it implements the same interface and runs in-process.",
+    id: "ai-act/article-5#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/5/",
+    title: "Article 5 — Prohibited AI Practices",
+    section: "Unacceptable risk",
+    text: "Article 5 lists the AI practices that are prohibited in the Union because they are considered to pose an unacceptable risk to fundamental rights. These include: (a) placing on the market, putting into service, or using an AI system that uses subliminal techniques, manipulative or deceptive techniques, or exploits vulnerabilities of natural persons or specific groups; (b) AI systems that evaluate or classify the trustworthiness of natural persons leading to detrimental or unfavourable treatment (social scoring); (c) real-time remote biometric identification in publicly accessible spaces for law enforcement purposes, with limited exceptions; and (d) AI systems that infer emotions of natural persons in the workplace and education settings, with medical and safety exceptions. Member States may allow exceptions for the biometric identification cases under strict conditions.",
   },
   {
-    id: "mastra-docs/rag/retrieval#chunk-0",
-    url: "https://mastra.ai/docs/rag/retrieval",
-    title: "Retrieval & Reranking",
-    section: "Top-K and rerank",
-    text: "Mastra's retrieval step asks the vector store for the top-K most similar chunks (default K=10), then optionally re-ranks them with a cross-encoder model. Rerankers catch cases where pure vector similarity returns a chunk that is lexically similar but semantically off (e.g. an 'installation error' page when the user wanted the 'how to install' page). The MastraAgentRelevanceScorer is the default reranker; CohereReranker is the production-grade alternative.",
+    id: "ai-act/article-6#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/6/",
+    title: "Article 6 — High-Risk Classification",
+    section: "Two paths to high-risk",
+    text: "Article 6(1) establishes that an AI system is high-risk if (a) it is intended to be used as a safety component of a product covered by one of the Union harmonisation legislations listed in Annex I, and that product is required to undergo a conformity assessment under those legislations; or (b) it is listed in Annex III. Article 6(2) requires that the high-risk classification in Annex III be reviewed annually. Article 6(3) sets out the conditions for a system listed in Annex III NOT to be considered high-risk: it must not pose a significant risk of harm to the health, safety or fundamental rights of natural persons, and it must not materially influence the outcome of decision-making. The provider must document the assessment, register the system, and provide it on request.",
   },
   {
-    id: "mastra-docs/agents/overview#chunk-0",
-    url: "https://mastra.ai/docs/agents/overview",
-    title: "Mastra Agents",
-    section: "What is an agent",
-    text: "A Mastra agent is an LLM bound to a system prompt, a set of tools, and an optional memory backend. Agents are the runtime primitive for tool-using, multi-turn LLM applications. Create one with `new Agent({ name, instructions, model, tools })`. The model field takes any Vercel AI SDK provider; tools are async functions with a Zod input schema.",
+    id: "ai-act/article-10#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/10/",
+    title: "Article 10 — Data and Data Governance",
+    section: "Data quality for high-risk systems",
+    text: "Article 10 requires providers of high-risk AI systems to use training, validation, and testing data sets that meet specific quality criteria. The data sets must be relevant, sufficiently representative, and to the best extent possible, free of errors and complete. They must have appropriate statistical properties, including, where applicable, as regards the persons or groups of persons on which the system is intended to be used. Data sets must take into account, to the extent required by the intended purpose, the characteristics or elements that are particular to the specific geographical, behavioural, or functional setting within which the system is intended to be used. The provider must examine and document possible biases in the data sets that could lead to discrimination.",
   },
   {
-    id: "mastra-src/rag/embeddings/index#chunk-0",
-    url: "https://github.com/mastra-ai/mastra/blob/main/packages/rag/src/embeddings/index.ts",
-    title: "Mastra Embeddings",
-    section: "Voyage integration",
-    text: "Mastra's RAG module ships an embedMany helper that batches calls to Voyage AI's voyage-code-3 model. The default dimension is 1024 and the input type is 'document' for indexing, 'query' for retrieval. The same model must be used for indexing and querying — mixing them silently breaks similarity. Voyage is recommended over OpenAI for code-heavy corpora (Mastra's docs are 40% code snippets by volume).",
+    id: "ai-act/article-14#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/14/",
+    title: "Article 14 — Human Oversight",
+    section: "Design for human-in-the-loop",
+    text: "Article 14 requires high-risk AI systems to be designed and developed in such a way, including with appropriate human-machine interface tools, that they can be effectively overseen by natural persons during the period in which they are in use. Oversight must enable the persons to: properly understand the capacities and limitations of the system; remain aware of the tendency to automatically rely on outputs; correctly interpret outputs; decide not to use the system or to override, reverse, or disregard its output; and intervene on the system's operation or interrupt it through a stop button or similar procedure. The oversight measures must be commensurate with the risks, the level of autonomy, and the context of use.",
   },
   {
-    id: "mastra-src/pg/vector#chunk-0",
-    url: "https://github.com/mastra-ai/mastra/blob/main/packages/pg/src/vector.ts",
-    title: "PgVector",
-    section: "Usage",
-    text: "Use the PgVector class from @mastra/pg to connect to a Postgres database with the pgvector extension. Initialize with a connection string: `new PgVector({ connectionString })`. Call `createIndex({ indexName, dimension })` once before upserting vectors; this creates the schema and an HNSW index for fast cosine search. Query with `query({ indexName, vector, topK, filter })` to retrieve the most similar rows.",
+    id: "ai-act/article-16#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/16/",
+    title: "Article 16 — Provider Obligations",
+    section: "Main provider obligations",
+    text: "Article 16 sets out the obligations of providers of high-risk AI systems. Providers must: (a) ensure that their high-risk AI systems comply with the requirements in Chapter III Section 2 (Articles 8-15); (b) have a quality management system in place (Article 17); (c) maintain the technical documentation required by Annex IV; (d) keep automatic logs (Article 12); (e) ensure the system undergoes the relevant conformity assessment procedure (Article 43) before being placed on the market or put into service; (f) draw up an EU declaration of conformity (Article 47); (g) affix the CE marking (Article 48); (h) register the system in the EU database (Article 49); (i) take corrective actions and inform authorities if the system is not in conformity; (j) upon request, demonstrate conformity to national authorities; and (k) ensure the system has a level of accuracy, robustness, and cybersecurity consistent with the intended purpose.",
   },
   {
-    id: "mastra-docs/workflows/overview#chunk-0",
-    url: "https://mastra.ai/docs/workflows/overview",
-    title: "Workflows",
-    section: "What is a workflow",
-    text: "A Mastra workflow is a directed graph of steps. Each step is a named, typed function that takes the previous step's output and produces the next step's input. Workflows are durable: each step's result is checkpointed so a long-running workflow can resume from the last successful step after a crash. Use `createWorkflow({ name, steps })` and call `.run({ input })` to execute.",
+    id: "ai-act/article-26#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/26/",
+    title: "Article 26 — Deployer Obligations",
+    section: "What deployers must do",
+    text: "Article 26 sets out the obligations of deployers of high-risk AI systems. Deployers must use the system in accordance with the instructions for use, assign human oversight to natural persons with the necessary competence, ensure the input data is relevant and sufficiently representative, monitor the system's operation for risks, inform the provider and relevant authorities of serious incidents or risk of infringement, and — where the deployer is a public authority or a private entity providing public services — conduct a fundamental rights impact assessment before putting the system into use. Deployers of certain systems listed in Annex III must also inform natural persons that they are subject to a high-risk AI system and, where applicable, provide a summary of the fundamental rights impact assessment.",
   },
   {
-    id: "mastra-docs/storage/overview#chunk-0",
-    url: "https://mastra.ai/docs/storage/overview",
-    title: "Storage",
-    section: "Memory backends",
-    text: "Mastra's storage layer gives agents a memory backend so multi-turn conversations feel coherent. The default backend is Postgres (via the same PgVector connection), with optional LibSQL/SQLite for local dev. Memory is opt-in per agent via the `memory` field on the Agent constructor; without it, every call is stateless.",
+    id: "ai-act/article-50#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/50/",
+    title: "Article 50 — Transparency Obligations",
+    section: "User-facing disclosures",
+    text: "Article 50 requires transparency for certain AI systems that interact with natural persons, generate content, or perform specific tasks. Providers of AI systems intended to interact directly with natural persons must design the system so that the affected persons are informed that they are interacting with an AI, unless this is obvious from the perspective of a reasonably well-informed natural person. Providers of AI systems that generate synthetic audio, image, video, or text content must mark the outputs in a machine-readable way detectable as artificially generated or manipulated. Deployers of emotion recognition or biometric categorisation systems must inform the exposed persons. Deployers of AI systems that generate or manipulate deep fake content must disclose that the content has been artificially generated or manipulated.",
   },
   {
-    id: "mastra-docs/deployment/overview#chunk-0",
-    url: "https://mastra.ai/docs/deployment/overview",
-    title: "Deployment",
-    section: "Vercel",
-    text: "Mastra apps deploy to Vercel in one push. Add ANTHROPIC_API_KEY, VOYAGE_API_KEY, and POSTGRES_CONNECTION_STRING to the Vercel project env, push to main, and the app is live. The recommended Postgres is Supabase (free tier is generous). For self-hosted Postgres, point POSTGRES_CONNECTION_STRING at any pgvector-enabled instance.",
+    id: "ai-act/article-55#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/55/",
+    title: "Article 55 — GPAI Models with Systemic Risk",
+    section: "When GPAI crosses the threshold",
+    text: "Article 55 applies additional obligations to providers of general-purpose AI models classified as posing systemic risk. The Commission designates a GPAI model as systemic risk if it has high-impact capabilities, presumed when the cumulative compute used for its training exceeds 10^25 floating-point operations (FLOPs). Providers of systemic-risk GPAI models must: perform model evaluations and document them; assess and mitigate possible systemic risks at Union level, including their source; track and report serious incidents to the AI Office; and ensure an adequate level of cybersecurity for the model and its physical infrastructure. These obligations are in addition to those in Article 53 (which apply to all GPAI models, including those below the systemic-risk threshold).",
   },
   {
-    id: "mastra-docs/integrations/overview#chunk-0",
-    url: "https://mastra.ai/docs/integrations/overview",
-    title: "Integrations",
-    section: "Vector stores supported",
-    text: "Mastra ships adapters for pgvector (Postgres), Pinecone, Qdrant, Chroma, and MongoDB Atlas Vector Search. All implement the same VectorStore interface: createIndex, upsert, query. The default for new projects is pgvector; switch backends by swapping the import — no call-site changes needed.",
+    id: "ai-act/article-99#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/99/",
+    title: "Article 99 — Penalties",
+    section: "Maximum administrative fines",
+    text: "Article 99 sets the maximum administrative fines for infringement of the AI Act. Member States must lay down the rules on penalties and notify the Commission by 2 August 2025, taking into account the nature, gravity, and duration of the infringement. The maximum fines are: (a) EUR 35 000 000 or 7% of total worldwide annual turnover, whichever is higher, for infringement of Article 5 (prohibited practices); (b) EUR 15 000 000 or 3% of total worldwide annual turnover, whichever is higher, for non-compliance with most other obligations and requirements; (c) EUR 7 500 000 or 1% of total worldwide annual turnover, whichever is higher, for supplying incorrect, incomplete, or misleading information to notified bodies or authorities. SMEs benefit from the lower of the two amounts in each case.",
   },
 ];
 
