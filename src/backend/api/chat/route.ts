@@ -48,6 +48,7 @@ import type {
   ChatRequest,
   Citation,
   CustomUIPart,
+  IncomingMessage,
   RetrievalMetadata,
 } from "@/../api-contract";
 
@@ -60,24 +61,85 @@ import type {
 type UIMessageStream = AsyncIterableStream<UIMessageChunk>;
 
 /**
- * Zod schema for the incoming request body. We validate at the boundary
- * so the rest of the pipeline can trust its inputs.
+ * Zod schema for the incoming message. We accept BOTH:
+ *   - the AI SDK v6 shape: `{ id, role, parts: [{ type, text }, ...] }`
+ *   - the legacy v1 shape: `{ id, role, content: string }`
  *
- * Why `IncomingMessage` is a plain string here:
- *   The API contract says we accept `{ id, role, content: string }`.
- *   Tool parts and file parts are not in v1. Zod's strict shape catches
- *   the client trying to sneak in unsupported parts.
+ * Why both: the frontend uses Vercel AI SDK v6 (`useChat`) which sends
+ * `parts`; older clients (or curl smoke tests) may still send the
+ * v1 `content` field. The schema is permissive on input and the
+ * normalizer below reduces both shapes to a single `parts`-bearing
+ * form for the rest of the pipeline.
+ *
+ * Why we restrict `parts[].type` to "text": v1 of the contract does
+ * not support tool/file/reasoning parts. Anything else is dropped
+ * during normalization, but the Zod schema rejects the whole message
+ * so the client gets a clear validation error instead of silent loss.
  */
-const incomingMessageSchema = z.object({
-  id: z.string().min(1),
-  role: z.enum(["user", "assistant", "system"]),
-  content: z.string(),
+const incomingMessagePartSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
 });
+
+const incomingMessageSchema = z
+  .object({
+    id: z.string().min(1),
+    role: z.enum(["user", "assistant", "system"]),
+    parts: z.array(incomingMessagePartSchema).optional(),
+    content: z.string().optional(),
+  })
+  // At least one of `parts` or `content` must be present and non-empty.
+  .refine(
+    (m) =>
+      (Array.isArray(m.parts) && m.parts.some((p) => p.text.trim().length > 0)) ||
+      (typeof m.content === "string" && m.content.trim().length > 0),
+    { message: "Message must include non-empty `parts` or `content`" },
+  );
 
 const chatRequestSchema = z.object({
   messages: z.array(incomingMessageSchema).min(1).max(100),
   sessionId: z.string().min(1).optional(),
 });
+
+/**
+ * Normalize an incoming message into the canonical `parts`-bearing
+ * shape the pipeline consumes.
+ *
+ * Why a normalizer (and not two branches everywhere):
+ *   The pipeline's helpers (`extractLatestUserText`, `extractPriorTurns`)
+ *   already collapse `parts` to a single text string internally. We
+ *   want a single shape at the boundary so the rest of the code
+ *   stays simple.
+ *
+ * Rules:
+ *   - If `parts` is present and non-empty, concatenate the text of
+ *     all `type: "text"` parts.
+ *   - Else if `content` is present, wrap it as a single text part.
+ *   - Else (shouldn't happen — Zod rejects), return an empty parts array.
+ */
+function normalizeMessage(
+  raw: z.infer<typeof incomingMessageSchema>,
+): IncomingMessage {
+  if (Array.isArray(raw.parts) && raw.parts.length > 0) {
+    const text = raw.parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+    return {
+      id: raw.id as IncomingMessage["id"],
+      role: raw.role,
+      parts: [{ type: "text", text }],
+      content: text,
+    };
+  }
+  const text = raw.content ?? "";
+  return {
+    id: raw.id as IncomingMessage["id"],
+    role: raw.role,
+    parts: [{ type: "text", text }],
+    content: text,
+  };
+}
 
 /**
  * Generate a request id (UUID-ish). Used for log correlation.
@@ -113,7 +175,12 @@ export async function POST(req: Request): Promise<Response> {
       childLog.warn({ issues: parsed.error.issues }, "chat.bad_request");
       return jsonError("VALIDATION_FAILED", "Invalid request body", 400, requestId);
     }
-    body = parsed.data as ChatRequest;
+    // Normalize each message into the canonical `parts`-bearing shape
+    // so the rest of the pipeline sees a single, consistent form.
+    body = {
+      sessionId: parsed.data.sessionId as ChatRequest["sessionId"],
+      messages: parsed.data.messages.map((m) => normalizeMessage(m)),
+    };
   } catch (err) {
     childLog.error({ err }, "chat.parse_error");
     return jsonError("VALIDATION_FAILED", "Body must be valid JSON", 400, requestId);
@@ -293,14 +360,24 @@ function jsonError(
  * Get the last user-role message's text. Returns `null` if there's
  * no user message (the Zod schema enforces at least one, but we
  * still guard).
+ *
+ * Why we read from `parts` first, then `content`:
+ *   The route normalizes messages to the canonical `parts`-bearing
+ *   shape, so `parts` is always present here. `content` is kept as
+ *   a fallback for any code path that hasn't been normalized.
  */
 function lastUserText(
-  messages: ReadonlyArray<{ role: string; content: string }>,
+  messages: ReadonlyArray<IncomingMessage>,
 ): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m && m.role === "user" && m.content.trim()) {
-      return m.content;
+    if (m && m.role === "user") {
+      const fromParts = m.parts
+        ?.filter((p) => p.type === "text")
+        .map((p) => p.text)
+        .join("");
+      const text = (fromParts ?? m.content ?? "").trim();
+      if (text) return text;
     }
   }
   return null;

@@ -104,17 +104,51 @@ export interface Citation {
 // ---------- Messages --------------------------------------------------------
 
 /**
+ * A single text-bearing part in a `UIMessage`. AI SDK v6 sends chat
+ * history as `{ role, parts: [{ type, text }] }` rather than the
+ * v1/v2 `{ role, content }` shape. We mirror the SDK's discriminator
+ * minimally here so the route's Zod schema can validate parts without
+ * importing the full `UIMessage` union.
+ *
+ * Why a single part type and not the SDK's full union: the v1 contract
+ * only supports plain text. We accept only `type: "text"` parts and
+ * drop anything else. Forwarding arbitrary `UIMessage` parts would
+ * expand the server's attack surface and we don't have a tool-use
+ * pipeline yet.
+ */
+export interface IncomingMessagePart {
+  type: "text";
+  text: string;
+}
+
+/**
  * The minimum message shape we accept from the client. We intentionally
  * re-declare this instead of importing @ai-sdk/react's UIMessage so the
  * server doesn't have to trust the client's full discriminated union.
  *
  * On the server we will pass these to the AI SDK's convertToModelMessages.
+ *
+ * Format: AI SDK v6's `UIMessage` shape — `{ id, role, parts: [...] }`.
+ * The route's Zod schema also accepts the legacy v1 `{ id, role, content }`
+ * shape for backwards compat; internally the route normalizes both
+ * shapes into a single `parts`-bearing form before handing the messages
+ * to the pipeline.
  */
 export interface IncomingMessage {
   id: MessageId;
   role: "user" | "assistant" | "system";
-  /** Plain text only in v1 — no tool parts, no file parts. */
-  content: string;
+  /**
+   * AI SDK v6 message body. Each part is a typed chunk; v1 only
+   * supports text parts.
+   */
+  parts: IncomingMessagePart[];
+  /**
+   * Legacy v1 plain-text content. The route's Zod schema still
+   * accepts messages that ONLY provide `content` (no `parts`); the
+   * route then synthesizes a single `text` part from it. New clients
+   * should send `parts` only.
+   */
+  content?: string;
 }
 
 // ---------- Request / Response --------------------------------------------
