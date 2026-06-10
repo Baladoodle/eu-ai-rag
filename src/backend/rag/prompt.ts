@@ -39,7 +39,7 @@
  * ----------------------------------------------------------------------------
  */
 import type { RetrievedChunk } from "@/lib/vector-store-reader";
-import type { Source } from "../../../api-contract";
+import type { Source } from "@/../api-contract";
 
 /**
  * The static part of the system prompt.

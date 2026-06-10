@@ -54,7 +54,7 @@ import {
   getAnthropicModel,
   hasAnthropicCredentials,
 } from "@/lib/anthropic";
-import type { IncomingMessage } from "../../../api-contract";
+import type { IncomingMessage } from "@/../api-contract";
 import { buildCitations } from "./citations";
 import type { RetrievedChunk } from "@/lib/vector-store-reader";
 import type { RetrievalResult } from "./retrieval";
@@ -150,11 +150,16 @@ export function toModelMessages(
   // client starts sending tool parts, we'll handle them automatically.
   // We cast through unknown because our `IncomingMessage` is a strict
   // subset of `UIMessage` and the SDK doesn't know that.
+  //
+  // Note: convertToModelMessages expects each message to have a
+  // `parts` array (the AI SDK v5+ shape). Our IncomingMessage is the
+  // v1 plain-text shape. We synthesize a single `text` part so the
+  // SDK's helper can run without throwing.
   return convertToModelMessages(
     messages.map((m) => ({
       id: m.id,
       role: m.role,
-      content: m.content,
+      parts: [{ type: "text", text: m.content }],
     })) as unknown as Parameters<typeof convertToModelMessages>[0],
   ) as unknown as ModelMessage[];
 }
@@ -187,6 +192,18 @@ export async function generate(
   //   coupling.
   const citations = buildCitations(options.chunks, { embeddingModel: "voyage-code-3" });
   log.debug({ count: citations.length }, "generation.citations.built");
+
+  // Mock path: when there are no credentials and we're not forcing
+  // MOCK=1, we'd rather degrade to a hand-crafted stream than fail.
+  // This keeps `npm run dev` working with zero env vars.
+  if (!hasAnthropicCredentials() && process.env.MOCK !== "1") {
+    log.warn("generation.mockFallback.noCredentials");
+    return {
+      stream: buildMockAnswerStream(options, citations) as unknown as GenerationOutput["stream"],
+      citations,
+      modelId: "mock-local",
+    };
+  }
 
   // We use the AI SDK's `streamText` to get a UI message stream.
   // The model is supplied via the AI SDK Anthropic provider — the
@@ -267,4 +284,79 @@ function serializeError(err: unknown): Record<string, unknown> {
     return { ...(err as Record<string, unknown>) };
   }
   return { value: String(err) };
+}
+
+/**
+ * Build a hand-crafted UIMessageStream for the "no API key" path.
+ *
+ * Why we have this:
+ *   `npm install && npm run dev` must work with zero env vars. When
+ *   there's no Anthropic key, we synthesize a credible answer from
+ *   the retrieved chunks (with inline citations) and stream it
+ *   token-by-token so the UI's streaming UX is exercised.
+ *
+ * The stream emits:
+ *   - one `start` chunk
+ *   - one `text-start` + multiple `text-delta` chunks + one `text-end`
+ *   - one `finish` chunk
+ *
+ * It is NOT a UIMessageChunk stream — it returns a ReadableStream
+ * compatible with `toUIMessageStreamResponse`'s expectations. We
+ * build it with `createUIMessageStream` so the wire format is
+ * identical to the real path.
+ */
+function buildMockAnswerStream(
+  options: GenerateOptions,
+  _citations: GenerationOutput["citations"],
+): ReadableStream<unknown> {
+  // Build the answer from the retrieved chunks. We use the chunk text
+  // verbatim (truncated) and cite each chunk by index, exactly as the
+  // real prompt asks the model to do.
+  const lines: string[] = [];
+  const retrieval = options.chunks;
+  if (retrieval.length === 0) {
+    lines.push("I couldn't find that in the Mastra docs. Could you rephrase the question?");
+  } else {
+    lines.push(
+      `Here's what I found in the Mastra docs about that. I'm running in local-only mode (no API key), so this is a synthesized answer built directly from the retrieved sources.`,
+    );
+    lines.push("");
+    for (let i = 0; i < retrieval.length; i++) {
+      const chunk = retrieval[i]!;
+      const snippet = chunk.text.length > 240 ? chunk.text.slice(0, 240).trim() + "…" : chunk.text;
+      lines.push(`From source [${i + 1}]: ${snippet}`);
+      lines.push("");
+    }
+    lines.push(
+      `Set ANTHROPIC_API_KEY (and VOYAGE_API_KEY for production embeddings) to get a real LLM-synthesized answer with prompt caching.`,
+    );
+  }
+  const answer = lines.join("\n");
+
+  // We reuse `createUIMessageStream` so the wire format matches the
+  // real path exactly. The casts through `unknown` are necessary
+  // because our local types are a strict subset of the SDK's union.
+  const { createUIMessageStream } = require("ai") as typeof import("ai");
+  return createUIMessageStream({
+    execute: async ({ writer }) => {
+      const messageId = `mock-${Date.now()}`;
+      const textId = `${messageId}-text`;
+      await writer.write({ type: "start", messageId } as unknown as Parameters<typeof writer.write>[0]);
+      await writer.write({ type: "text-start", id: textId } as unknown as Parameters<typeof writer.write>[0]);
+      // Emit the answer in 8-char chunks with a tiny delay so the
+      // UI's streaming animation is visible.
+      const chunkSize = 8;
+      for (let i = 0; i < answer.length; i += chunkSize) {
+        const piece = answer.slice(i, i + chunkSize);
+        await writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: piece,
+        } as unknown as Parameters<typeof writer.write>[0]);
+        await new Promise((r) => setTimeout(r, 12));
+      }
+      await writer.write({ type: "text-end", id: textId } as unknown as Parameters<typeof writer.write>[0]);
+      await writer.write({ type: "finish" } as unknown as Parameters<typeof writer.write>[0]);
+    },
+  }) as unknown as ReadableStream<unknown>;
 }

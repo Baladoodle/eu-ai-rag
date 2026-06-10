@@ -136,16 +136,21 @@ export async function getVectorReader(
   const { getVectorStore } = await import("@/lib/vector");
   const store = await getVectorStore();
 
+  // The default index name. The ingest pipeline writes to
+  // `mastra_docs`; readers query the same. Centralized here so a
+  // future "multi-corpus" feature only has to override this string.
+  const INDEX_NAME = "mastra_docs";
+
   cachedReader = {
     async query(embedding, options) {
       const { topK, minScore } = options;
       log.debug({ topK, minScore }, "reader.query.start");
 
-      // The underlying `VectorStore.query` expects `{ vector, topK, filter? }`.
-      // We forward the embedding and let the store handle the rest.
-      const results = await store.query({
-        vector: embedding,
+      // The unified `VectorStore.query` takes (indexName, vector, opts).
+      // We pin the index name above and forward the rest.
+      const results = await store.query(INDEX_NAME, embedding, {
         topK,
+        ...(typeof minScore === "number" ? { minScore } : {}),
       });
 
       const adapted = results.map(adaptQueryResult);

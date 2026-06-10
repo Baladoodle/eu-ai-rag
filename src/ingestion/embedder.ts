@@ -24,7 +24,6 @@
  * ----------------------------------------------------------------------------
  */
 import { VoyageAIClient } from "voyageai";
-import OpenAI from "openai";
 import pRetry from "p-retry";
 
 import { env } from "@/lib/env";
@@ -44,7 +43,6 @@ const MAX_INPUT_CHARS = 12_000;
 /** Lazy singletons. The SDKs do their own connection pooling; we
  *  want to reuse the client across calls in a long ingest run. */
 let voyageClient: VoyageAIClient | null = null;
-let openaiClient: OpenAI | null = null;
 
 function getVoyage(): VoyageAIClient {
   if (!voyageClient) {
@@ -54,16 +52,6 @@ function getVoyage(): VoyageAIClient {
     voyageClient = new VoyageAIClient({ apiKey: env.VOYAGE_API_KEY });
   }
   return voyageClient;
-}
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    if (!env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai");
-    }
-    openaiClient = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-  }
-  return openaiClient;
 }
 
 /**
@@ -113,7 +101,12 @@ async function embedBatchVoyage(texts: string[]): Promise<number[][]> {
 }
 
 async function embedBatchOpenAI(texts: string[]): Promise<number[][]> {
-  const client = getOpenAI();
+  // Lazy-import OpenAI so a Voyage-only dev doesn't need the package.
+  if (!env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai");
+  }
+  const { default: OpenAI } = (await import("openai")) as { default: new (cfg: { apiKey: string }) => { embeddings: { create: (args: { model: string; input: string[] }) => Promise<{ data: Array<{ embedding: number[] }> }> } } };
+  const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
   return pRetry(
     async () => {
       const res = await client.embeddings.create({

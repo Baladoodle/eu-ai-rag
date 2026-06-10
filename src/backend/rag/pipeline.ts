@@ -41,7 +41,7 @@ import { retrieve, type RetrievalResult } from "./retrieval";
 import { buildPrompt, type BuiltPrompt } from "./prompt";
 import { generate, type GenerationOutput } from "./generation";
 import type { RetrievedChunk } from "@/lib/vector-store-reader";
-import type { IncomingMessage, Source, Citation } from "../../../api-contract";
+import type { IncomingMessage, Source, Citation } from "@/../api-contract";
 import { buildCitations } from "./citations";
 
 /**
@@ -54,6 +54,23 @@ import { buildCitations } from "./citations";
  *   obscure it; a constant is grep-able.
  */
 const EMPTY_RETRIEVAL_THRESHOLD = 0.5;
+
+/**
+ * The minimum top-score needed in local (no-API-key) mode to consider
+ * retrieval "good enough" to actually call the LLM. We lower the
+ * threshold because the local hash-based embedder produces near-zero
+ * cosine similarities — even a perfect match is around 0.3. 0.05 is
+ * "the local embedder found something that shares at least one token".
+ */
+const LOCAL_EMPTY_RETRIEVAL_THRESHOLD = 0.05;
+
+/**
+ * Detect the local-embedder mode. We read the same flag the embedder
+ * does so the two stay in sync.
+ */
+function isLocalEmbedderMode(): boolean {
+  return !process.env.VOYAGE_API_KEY && !process.env.OPENAI_API_KEY;
+}
 
 /**
  * Public inputs to the pipeline.
@@ -104,9 +121,16 @@ export async function runRagPipeline(
   );
 
   // --- Step 1: Retrieve ---
+  //
+  // In local-embedder mode the cosine similarities are near-zero
+  // (the hash embedder produces orthogonal-ish vectors), so the
+  // retrieval layer's 0.5 min-score filter would drop everything.
+  // We override the min-score to 0 to let the local KB contribute
+  // anything that has at least one shared token.
+  const localMode = isLocalEmbedderMode();
   const retrieval = await retrieve(query, {
     topK: options?.topK,
-    minScore: options?.minScore,
+    minScore: options?.minScore ?? (localMode ? 0 : undefined),
   });
 
   // --- Step 2: Handle the empty-retrieval case explicitly ---
@@ -119,7 +143,7 @@ export async function runRagPipeline(
   //   prompt's refusal rule covers this, but we'd rather not even
   //   *call* the LLM — saves tokens, latency, and the cost of a 4xx
   //   from the LLM.
-  if (retrieval.chunks.length === 0 || retrieval.metadata.topScore < EMPTY_RETRIEVAL_THRESHOLD) {
+  if (retrieval.chunks.length === 0 || retrieval.metadata.topScore < (isLocalEmbedderMode() ? LOCAL_EMPTY_RETRIEVAL_THRESHOLD : EMPTY_RETRIEVAL_THRESHOLD)) {
     log.warn(
       {
         chunkCount: retrieval.chunks.length,

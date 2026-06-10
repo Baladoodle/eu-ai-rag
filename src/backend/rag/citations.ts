@@ -38,7 +38,7 @@ import {
   asSourceId,
   type Citation,
   type Source,
-} from "../../../api-contract";
+} from "@/../api-contract";
 import { makeSnippet } from "./prompt";
 
 /**

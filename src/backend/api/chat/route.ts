@@ -49,7 +49,7 @@ import type {
   Citation,
   CustomUIPart,
   RetrievalMetadata,
-} from "../../../../api-contract";
+} from "@/../api-contract";
 
 /**
  * A `UIMessageStream` is `AsyncIterableStream<UIMessageChunk>` — a
