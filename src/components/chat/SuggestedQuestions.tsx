@@ -11,6 +11,10 @@
  * The starter questions live here (not in ChatContainer) so the EmptyState
  * and the BrowseTheAct panel both import from one place and the
  * regulation-specific prompts stay next to the visual treatment.
+ *
+ * Layout: a 2x2 grid at all sizes. Four equal cards read as a balanced
+ * quartet and never overflow the viewport. The grid auto-stretches so
+ * cards in the same row share the same height.
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
@@ -59,29 +63,25 @@ export function SuggestedQuestions({
       animate="visible"
       variants={messageListVariants}
       className={cn(
-        "flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:justify-center",
+        "grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2.5",
         className
       )}
     >
       {questions.map((question) => (
-        <motion.li
-          key={question.id}
-          variants={chipVariants}
-          className="sm:max-w-[280px] sm:flex-1"
-        >
+        <motion.li key={question.id} variants={chipVariants} className="h-full">
           <button
             type="button"
             onClick={() => onSelect(question.text)}
             className={cn(
-              "group flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-4 py-3 text-left text-sm",
-              "transition-colors hover:border-border hover:bg-card/70",
+              "group flex h-full w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-4 py-3.5 text-left text-sm",
+              "hover:border-border hover:bg-card/70",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             )}
           >
-            <span className="text-foreground/90">{question.text}</span>
+            <span className="text-balance text-foreground/90">{question.text}</span>
             <ArrowUpRight
               aria-hidden="true"
-              className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+              className="size-3.5 shrink-0 text-muted-foreground group-hover:-translate-y-0.5 group-hover:translate-x-0.5 motion-safe:transition-transform motion-safe:duration-150"
             />
           </button>
         </motion.li>

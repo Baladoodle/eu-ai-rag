@@ -4,12 +4,19 @@
  * EmptyState
  * ----------------------------------------------------------------------------
  * The full-area welcome state shown when the conversation has no messages.
- * Composes the project name, a one-line value prop, and the suggested
- * questions. Minimal copy — the page is the product.
+ * Composes the regulation pill, a heading, a one-line value prop, the
+ * suggested questions, and (handled by ChatContainer) the BrowseTheAct
+ * trigger + composer. Minimal copy — the page is the product.
  *
  * The hint line is intentionally regulation-specific so the user
  * understands the corpus: risk categories, provider obligations,
  * transparency rules, and GPAI.
+ *
+ * Layout: the column is centered vertically in its parent (h-full +
+ * justify-center) and uses a 2-step rhythm — 12px between the hero
+ * group's pill / heading / paragraphs, and 24px between the hero group
+ * and the suggested-question grid. The top-of-screen whitespace is
+ * controlled by the parent container, not the empty state itself.
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
@@ -34,11 +41,11 @@ export function EmptyState({ questions, onSelect, className }: EmptyStateProps) 
       animate="visible"
       variants={fadeInVariants}
       className={cn(
-        "mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center gap-8 px-4 text-center",
+        "mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center gap-6 px-4 pb-2 text-center",
         className
       )}
     >
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-2.5">
         <span className="rounded-full border border-border/60 bg-card/40 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
           Regulation (EU) 2024/1689
         </span>
@@ -48,7 +55,7 @@ export function EmptyState({ questions, onSelect, className }: EmptyStateProps) 
         <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground">
           Cited answers, grounded in the Articles, Recitals, and Annexes of the Act.
         </p>
-        <p className="max-w-sm text-pretty text-xs text-muted-foreground/80">
+        <p className="max-w-sm text-balance text-xs text-muted-foreground/80">
           Try risk categories, provider obligations, transparency rules, or GPAI.
         </p>
       </div>
