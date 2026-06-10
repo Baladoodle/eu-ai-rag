@@ -3,35 +3,33 @@
 /**
  * ChatContainer
  * ----------------------------------------------------------------------------
- * The full chat surface: header, transcript (or empty state), and composer.
- * Owns the useChatState hook so siblings don't have to know how the SDK
- * is configured.
+ * The full chat surface: header, transcript (or empty state), the
+ * optional BrowseTheAct panel, and the composer. Owns the useChatState
+ * hook so siblings don't have to know how the SDK is configured.
  *
  * Layout: a single column, centered, max-width capped at 2xl (672px).
  * This is the mastra.ai / Linear / Vercel pattern — one conversation,
- * one column, no sidebars (v1).
+ * one column.
+ *
+ * The BrowseTheAct panel sits in a "below the empty state, above the
+ * composer" slot: it gives users a quick scan of the Act's structure
+ * and a way to seed a query from any article title.
  * ----------------------------------------------------------------------------
  */
 import { motion, AnimatePresence } from "framer-motion";
 import * as React from "react";
 
+import { BrowseTheAct } from "@/components/chat/BrowseTheAct";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { EmptyState } from "@/components/chat/EmptyState";
 import { MessageList } from "@/components/chat/MessageList";
 import { Button } from "@/components/ui/button";
 import { fadeInVariants } from "@/lib/motion";
+import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 
 import { useChatState } from "./hooks/useChatState";
-
-// 3-4 starter questions. Kept short, real-EU-AI-Act, and pointing at the
-// parts of the regulation that have the densest signal in our corpus.
-const SUGGESTED_QUESTIONS = [
-  { id: "risk-classes", text: "What are the four risk categories in the EU AI Act?" },
-  { id: "high-risk", text: "How is a 'high-risk AI system' defined?" },
-  { id: "transparency", text: "What does Article 50 require of providers?" },
-  { id: "penalties", text: "What are the maximum fines under Article 99?" },
-];
+import { SUGGESTED_QUESTIONS } from "./SuggestedQuestions";
 
 export function ChatContainer() {
   const {
@@ -42,14 +40,20 @@ export function ChatContainer() {
     error,
     send,
     stop,
+    reset,
     retry,
   } = useChatState();
 
   const hasMessages = messages.length > 0;
 
+  const handleReset = React.useCallback(() => {
+    log.info({ messageCount: messages.length }, "chat.reset");
+    reset();
+  }, [reset, messages.length]);
+
   return (
     <div className="flex h-full w-full flex-col">
-      <Header onReset={hasMessages ? () => location.reload() : undefined} />
+      <Header onReset={hasMessages ? handleReset : undefined} />
 
       <main className="relative flex flex-1 flex-col overflow-hidden">
         <AnimatePresence mode="wait" initial={false}>
@@ -102,6 +106,10 @@ export function ChatContainer() {
             />
           ) : null}
         </AnimatePresence>
+
+        {!hasMessages ? (
+          <BrowseTheAct onSelectArticle={send} />
+        ) : null}
 
         <ChatInput
           onSubmit={send}
@@ -207,7 +215,7 @@ function ErrorBanner({ code, message, onRetry }: ErrorBannerProps) {
 function humanizeErrorCode(code: string): string {
   switch (code) {
     case "RETRIEVAL_EMPTY":
-      return "No relevant docs found";
+      return "No relevant articles found";
     case "RETRIEVAL_LOW_CONFIDENCE":
       return "Low confidence answer";
     case "LLM_TIMEOUT":
