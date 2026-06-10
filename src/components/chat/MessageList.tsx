@@ -14,6 +14,11 @@
  * Why we don't use react-virtuoso: our message count per session is tiny
  * (sub-100 in the worst case). Virtualization would add weight for no
  * perceived benefit at this scale.
+ *
+ * Auto-scroll respects the user: if they've scrolled UP to re-read an
+ * earlier answer, we don't yank the view back to the bottom on every
+ * streamed token. We only follow the tail when the user is already
+ * within `NEAR_BOTTOM_PX` of the bottom.
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
@@ -35,14 +40,22 @@ interface MessageListProps {
   className?: string;
 }
 
+/**
+ * If the user is within this many pixels of the bottom, we treat the
+ * viewport as "following" and snap to the bottom on new content.
+ * 100px is large enough to cover a streaming caret but small enough that
+ * a deliberate scroll-up disables auto-follow reliably.
+ */
+const NEAR_BOTTOM_PX = 100;
+
 export function MessageList({ messages, streamingMessageId = null, className }: MessageListProps) {
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const lastLengthRef = React.useRef(0);
 
-  // Auto-scroll to the bottom on every change to messages.
-  // We use requestAnimationFrame so the DOM has had a chance to lay out
-  // the newly-streamed text before we scroll, which avoids the
-  // "cursor keeps bouncing past the visible bottom" jitter.
+  // Auto-scroll to the bottom on every change to messages, BUT only if
+  // the user hasn't scrolled up to read earlier content. We measure
+  // distance-to-bottom inside requestAnimationFrame so the DOM has
+  // laid out the new text first.
   React.useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -51,7 +64,12 @@ export function MessageList({ messages, streamingMessageId = null, className }: 
     if (lastLengthRef.current === 0 && messages.length === 0) return;
 
     const frame = requestAnimationFrame(() => {
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const shouldFollow = distanceFromBottom <= NEAR_BOTTOM_PX;
+      if (shouldFollow) {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+      }
     });
     lastLengthRef.current = messages.length;
 
