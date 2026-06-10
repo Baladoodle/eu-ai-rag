@@ -14,12 +14,19 @@
  *   - Enter submits
  *   - Shift+Enter inserts a newline
  *   - Escape while focused does nothing destructive (the user is mid-thought)
+ *
+ * The shell uses Framer Motion to fade the focus state in and out so the
+ * border lift never feels janky on first click. This keeps the visual
+ * state change aligned with the rest of the chat (Framer Motion
+ * everywhere; no CSS transition utilities for state).
  * ----------------------------------------------------------------------------
  */
+import { motion } from "framer-motion";
 import { ArrowUp, Square } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { duration, easeOut } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
@@ -31,7 +38,7 @@ interface ChatInputProps {
   isStreaming?: boolean;
   /** Optional placeholder override. */
   placeholder?: string;
-  /** Imperatively focus the input (exposed via ref). */
+  /** Optional className for the outer form. */
   className?: string;
 }
 
@@ -45,6 +52,7 @@ export function ChatInput({
   className,
 }: ChatInputProps) {
   const [value, setValue] = React.useState("");
+  const [focused, setFocused] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // Auto-grow the textarea up to a cap. We measure with `scrollHeight`
@@ -87,14 +95,22 @@ export function ChatInput({
         handleSubmit();
       }}
       className={cn(
-        "mx-auto w-full max-w-2xl px-4 pb-8 pt-3",
+        "mx-auto w-full max-w-2xl px-4 pb-6 pt-2",
         className
       )}
     >
-      <div
+      <motion.div
+        animate={{
+          borderColor: focused
+            ? "color-mix(in oklch, var(--foreground) 22%, transparent)"
+            : "color-mix(in oklch, var(--foreground) 9%, transparent)",
+          backgroundColor: focused
+            ? "color-mix(in oklch, var(--card) 90%, var(--foreground) 10%)"
+            : "color-mix(in oklch, var(--card) 100%, transparent)",
+        }}
+        transition={{ duration: duration.base, ease: easeOut }}
         className={cn(
-          "group relative flex items-end gap-2 rounded-2xl border border-border/60 bg-card/50 p-2.5",
-          "transition-colors focus-within:border-foreground/20 focus-within:bg-card/80",
+          "group relative flex items-end gap-2 rounded-2xl border bg-card/50 p-2.5",
           "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.18)]"
         )}
       >
@@ -106,6 +122,8 @@ export function ChatInput({
           ref={textareaRef}
           value={value}
           onChange={(event) => setValue(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
@@ -140,7 +158,7 @@ export function ChatInput({
             <ArrowUp className="size-4" aria-hidden="true" />
           </Button>
         )}
-      </div>
+      </motion.div>
       <p className="mt-2.5 px-2 text-[10px] text-muted-foreground/80">
         Press <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Enter</kbd> to send, <kbd className="rounded border border-border/60 bg-muted/40 px-1 text-[9px]">Shift+Enter</kbd> for newline. Answers cite EU AI Act articles.
       </p>
