@@ -103,6 +103,24 @@ export interface GenerateOptions {
   modelId?: string;
   /** Optional: the full retrieval result (for telemetry). */
   retrieval?: RetrievalResult;
+  /**
+   * Optional: the latest user query text. Used by the MOCK=1 path to
+   * craft a plausible synthesized answer that references the user's
+   * actual question. Falls back to the last user message in `messages`.
+   */
+  query?: string;
+}
+
+/**
+ * Is the MOCK=1 short-circuit active?
+ *
+ * Why a helper (and not a direct `process.env.MOCK === "1"`):
+ *   - Tests want to flip the flag without mutating `process.env`.
+ *   - The flag is read in two places (here and `canGenerate`), so the
+ *     single source of truth prevents drift.
+ */
+export function isMockMode(): boolean {
+  return process.env.MOCK === "1";
 }
 
 /**
@@ -194,10 +212,22 @@ export async function generate(
   const citations = buildCitations(options.chunks, { embeddingModel: "voyage-code-3" });
   log.debug({ count: citations.length }, "generation.citations.built");
 
-  // Mock path: when there are no credentials and we're not forcing
-  // MOCK=1, we'd rather degrade to a hand-crafted stream than fail.
-  // This keeps `npm run dev` working with zero env vars.
-  if (!hasAnthropicCredentials() && process.env.MOCK !== "1") {
+  // Mock path: two distinct triggers short-circuit to the synthesized
+  // stream.
+  //   1. MOCK=1 was set explicitly. The user wants to demo / dev with
+  //      zero API keys. The Anthropic SDK is never called.
+  //   2. No credentials AND MOCK wasn't set. We degrade to a hand-crafted
+  //      stream rather than letting the SDK return a confusing 401.
+  //      (Same outcome as MOCK=1, different intent.)
+  if (isMockMode()) {
+    log.info({ query: options.query }, "generation.mock.short_circuit");
+    return {
+      stream: buildMockAnswerStream(options) as unknown as GenerationOutput["stream"],
+      citations,
+      modelId: "mock-local",
+    };
+  }
+  if (!hasAnthropicCredentials()) {
     log.warn("generation.mockFallback.noCredentials");
     return {
       stream: buildMockAnswerStream(options) as unknown as GenerationOutput["stream"],
@@ -259,7 +289,7 @@ export async function generate(
  * error rather than letting the SDK return a confusing 401.
  */
 export function canGenerate(): { ok: true } | { ok: false; reason: string } {
-  if (!hasAnthropicCredentials() && process.env.MOCK !== "1") {
+  if (!hasAnthropicCredentials() && !isMockMode()) {
     return { ok: false, reason: "ANTHROPIC_API_KEY is not set" };
   }
   return { ok: true };
@@ -288,50 +318,37 @@ function serializeError(err: unknown): Record<string, unknown> {
 }
 
 /**
- * Build a hand-crafted UIMessageStream for the "no API key" path.
+ * Build a hand-crafted UIMessageStream for the MOCK=1 (or no-credentials)
+ * path.
  *
  * Why we have this:
  *   `npm install && npm run dev` must work with zero env vars. When
- *   there's no Anthropic key, we synthesize a credible answer from
- *   the retrieved chunks (with inline citations) and stream it
- *   token-by-token so the UI's streaming UX is exercised.
+ *   there's no Anthropic key, OR when the user has explicitly set
+ *   MOCK=1, we synthesize a credible answer from the retrieved chunks
+ *   (with inline citations) and stream it token-by-token so the UI's
+ *   streaming UX is exercised.
+ *
+ * The synthesized answer:
+ *   - Opens with a short framing sentence so the answer reads as a
+ *     real chat response (not a list of snippets).
+ *   - References the user's actual question.
+ *   - Cites each retrieved chunk with a `[n]` marker, matching the
+ *     convention the real prompt asks the model to use.
+ *   - Closes with a one-line note about MOCK mode.
  *
  * The stream emits:
  *   - one `start` chunk
  *   - one `text-start` + multiple `text-delta` chunks + one `text-end`
  *   - one `finish` chunk
  *
- * It is NOT a UIMessageChunk stream — it returns a ReadableStream
- * compatible with `toUIMessageStreamResponse`'s expectations. We
- * build it with `createUIMessageStream` so the wire format is
- * identical to the real path.
+ * It returns a stream compatible with `toUIMessageStreamResponse`'s
+ * expectations. We build it with `createUIMessageStream` so the wire
+ * format is identical to the real path.
  */
 function buildMockAnswerStream(
   options: GenerateOptions,
 ): ReadableStream<unknown> {
-  // Build the answer from the retrieved chunks. We use the chunk text
-  // verbatim (truncated) and cite each chunk by index, exactly as the
-  // real prompt asks the model to do.
-  const lines: string[] = [];
-  const retrieval = options.chunks;
-  if (retrieval.length === 0) {
-    lines.push("I couldn't find that in the Mastra docs. Could you rephrase the question?");
-  } else {
-    lines.push(
-      `Here's what I found in the Mastra docs about that. I'm running in local-only mode (no API key), so this is a synthesized answer built directly from the retrieved sources.`,
-    );
-    lines.push("");
-    for (let i = 0; i < retrieval.length; i++) {
-      const chunk = retrieval[i]!;
-      const snippet = chunk.text.length > 240 ? chunk.text.slice(0, 240).trim() + "…" : chunk.text;
-      lines.push(`From source [${i + 1}]: ${snippet}`);
-      lines.push("");
-    }
-    lines.push(
-      `Set ANTHROPIC_API_KEY (and VOYAGE_API_KEY for production embeddings) to get a real LLM-synthesized answer with prompt caching.`,
-    );
-  }
-  const answer = lines.join("\n");
+  const answer = composeMockAnswer(options);
 
   // We reuse `createUIMessageStream` so the wire format matches the
   // real path exactly. The casts through `unknown` are necessary
@@ -342,9 +359,9 @@ function buildMockAnswerStream(
       const textId = `${messageId}-text`;
       await writer.write({ type: "start", messageId } as unknown as Parameters<typeof writer.write>[0]);
       await writer.write({ type: "text-start", id: textId } as unknown as Parameters<typeof writer.write>[0]);
-      // Emit the answer in 8-char chunks with a tiny delay so the
-      // UI's streaming animation is visible.
-      const chunkSize = 8;
+      // Emit the answer in 6-char chunks with a small delay so the
+      // UI's streaming animation is visible but not glacially slow.
+      const chunkSize = 6;
       for (let i = 0; i < answer.length; i += chunkSize) {
         const piece = answer.slice(i, i + chunkSize);
         await writer.write({
@@ -352,10 +369,86 @@ function buildMockAnswerStream(
           id: textId,
           delta: piece,
         } as unknown as Parameters<typeof writer.write>[0]);
-        await new Promise((r) => setTimeout(r, 12));
+        await new Promise((r) => setTimeout(r, 8));
       }
       await writer.write({ type: "text-end", id: textId } as unknown as Parameters<typeof writer.write>[0]);
       await writer.write({ type: "finish" } as unknown as Parameters<typeof writer.write>[0]);
     },
   }) as unknown as ReadableStream<unknown>;
+}
+
+/**
+ * Compose the synthesized MOCK answer text.
+ *
+ * Why a separate function: the body of `buildMockAnswerStream` is
+ * already a state machine for stream emission. Putting the
+ * templating in its own function keeps the streaming code obvious.
+ *
+ * Shape of the output (when there are retrieved chunks):
+ *   "Based on the EU AI Act, here's what I found about <question>.
+ *
+ *    From source [1]: <snippet of chunk 1>
+ *    From source [2]: <snippet of chunk 2>
+ *
+ *    To get a real LLM-synthesized answer with prompt caching,
+ *    set ANTHROPIC_API_KEY."
+ *
+ * The citations are 1-based and line up with the order chunks are
+ * passed in, which matches the index the route appends to the
+ * `data-sources` part.
+ */
+function composeMockAnswer(options: GenerateOptions): string {
+  const retrieval = options.chunks;
+  const question = (options.query ?? lastUserText(options.messages) ?? "your question").trim();
+
+  if (retrieval.length === 0) {
+    return [
+      "Based on the EU AI Act, I couldn't find anything relevant to your question in the retrieved sources.",
+      "",
+      "Try rephrasing with more specific article numbers or terms (e.g. \"Article 5\", \"high-risk\", \"transparency\").",
+      "",
+      "Note: MOCK mode is active — set ANTHROPIC_API_KEY to get a real LLM-synthesized answer.",
+    ].join("\n");
+  }
+
+  const lines: string[] = [];
+  // Open with a short framing sentence that references the question so
+  // the answer reads like a real chat response, not a list of snippets.
+  lines.push(
+    `Based on the EU AI Act, here's what the retrieved sources say about "${question}":`,
+  );
+  lines.push("");
+
+  for (let i = 0; i < retrieval.length; i++) {
+    const chunk = retrieval[i]!;
+    // Truncate each chunk so the synthesized answer stays scannable.
+    const snippet = chunk.text.length > 220 ? chunk.text.slice(0, 220).trim() + "…" : chunk.text;
+    // One paragraph per source, with the 1-based [n] marker the UI
+    // matches against the data-sources part.
+    lines.push(`From source [${i + 1}]: ${snippet}`);
+    lines.push("");
+  }
+
+  lines.push(
+    "This is a MOCK-mode synthesized answer. Set ANTHROPIC_API_KEY to get a real LLM response with prompt caching.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Walk the messages and return the most recent user-role text.
+ *
+ * Why: when `GenerateOptions.query` is not provided (older callers),
+ * we still want the MOCK answer to reference the user's question.
+ */
+function lastUserText(
+  messages: ReadonlyArray<{ role: string; content: string }>,
+): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === "user" && m.content.trim()) {
+      return m.content;
+    }
+  }
+  return null;
 }

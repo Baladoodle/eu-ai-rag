@@ -174,8 +174,13 @@ export async function runRagPipeline(
   // --- Step 4: Generate ---
   const generation = await generate({
     system: prompt.system,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: messages.map((m) => ({ role: m.role, content: messageText(m) })),
     chunks: retrieval.chunks,
+    // The query is what the MOCK-mode synthesizer references in its
+    // opening sentence. The real Anthropic path doesn't need it
+    // (it already sees the messages), but passing it through keeps
+    // both paths aligned.
+    query: latestUserText ?? query,
     ...(options?.modelId ? { modelId: options.modelId } : {}),
     retrieval,
   });
@@ -209,15 +214,21 @@ export async function runRagPipeline(
  * Why: the prompt builder wants a "latest question" string for the
  * recap. We don't want to scan the messages array on every prompt
  * build.
+ *
+ * Why we read from `parts` (with a `content` fallback):
+ *   `IncomingMessage` is the AI SDK v6 `{ id, role, parts }` shape;
+ *   the route normalizes messages so `parts` is always present, but
+ *   legacy v1 callers may have left a `content` field set as well.
+ *   We collapse both into a single string for the prompt builder.
  */
 function extractLatestUserText(
   messages: ReadonlyArray<IncomingMessage>,
 ): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m && m.role === "user" && m.content.trim()) {
-      return m.content;
-    }
+    if (!m || m.role !== "user") continue;
+    const text = messageText(m);
+    if (text.trim()) return text;
   }
   return null;
 }
@@ -244,7 +255,22 @@ function extractPriorTurns(
   return messages
     .slice(0, lastUserIdx)
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role as "user" | "assistant", text: m.content }));
+    .map((m) => ({ role: m.role as "user" | "assistant", text: messageText(m) }));
+}
+
+/**
+ * Collapse an `IncomingMessage`'s `parts` (or `content`) to a single
+ * plain-text string. The route normalizes so `parts` is always
+ * present; we keep `content` as a defensive fallback.
+ */
+function messageText(m: IncomingMessage): string {
+  if (Array.isArray(m.parts) && m.parts.length > 0) {
+    return m.parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+  }
+  return m.content ?? "";
 }
 
 /**
