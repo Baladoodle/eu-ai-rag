@@ -7,6 +7,10 @@
  * question immediately — the empty state has no composer context to
  * "fill", and the questions are vetted to be a useful default. The user
  * can always type their own question instead.
+ *
+ * The starter questions live here (not in ChatContainer) so the EmptyState
+ * and the BrowseTheAct panel both import from one place and the
+ * regulation-specific prompts stay next to the visual treatment.
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
@@ -16,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { chipVariants, messageListVariants } from "@/lib/motion";
 
 export interface SuggestedQuestion {
-  /** Stable id, e.g. "rag-overview". Used as the React key. */
+  /** Stable id, e.g. "risk-classes". Used as the React key. */
   id: string;
   /** The text we display and insert into the composer. */
   text: string;
@@ -29,6 +33,18 @@ interface SuggestedQuestionsProps {
   /** Optional className for the wrapping `<ul>`. */
   className?: string;
 }
+
+/**
+ * 4 regulation-specific starter prompts. Chosen to cover the parts of
+ * Regulation (EU) 2024/1689 with the densest signal in our corpus and the
+ * most common first-time user questions.
+ */
+export const SUGGESTED_QUESTIONS: SuggestedQuestion[] = [
+  { id: "risk-levels", text: "What are the four risk levels for AI systems?" },
+  { id: "prohibited", text: "Which AI practices are prohibited under Article 5?" },
+  { id: "provider-obligations", text: "What obligations apply to providers of high-risk AI?" },
+  { id: "gpai", text: "What rules apply to general-purpose AI (GPAI) models?" },
+];
 
 export function SuggestedQuestions({
   questions,
