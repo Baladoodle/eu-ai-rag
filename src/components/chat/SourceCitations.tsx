@@ -111,7 +111,10 @@ export function CitationChips({ count, onSelect }: CitationChipsProps) {
       className="ml-1 inline-flex items-center gap-1 align-baseline"
     >
       {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
-        <button
+        // Per CLAUDE.md: hover/focus state changes go through Framer Motion.
+        // The chip animates border + bg + text color via whileHover/whileFocus
+        // so the affordance matches the chat's motion language.
+        <motion.button
           key={n}
           type="button"
           role="listitem"
@@ -120,15 +123,25 @@ export function CitationChips({ count, onSelect }: CitationChipsProps) {
             log.info({ index: n }, "citation.chip.click");
             onSelect?.(n);
           }}
+          whileHover={{
+            borderColor: "color-mix(in oklch, var(--foreground) 30%, transparent)",
+            backgroundColor: "color-mix(in oklch, var(--muted) 100%, transparent)",
+            color: "var(--foreground)",
+          }}
+          whileFocus={{
+            borderColor: "color-mix(in oklch, var(--foreground) 30%, transparent)",
+            backgroundColor: "color-mix(in oklch, var(--muted) 100%, transparent)",
+            color: "var(--foreground)",
+          }}
+          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
           className={cn(
             "inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-md border border-border/60 bg-muted/50 px-1 align-baseline",
             "text-[10px] font-medium text-muted-foreground tabular-nums",
-            "transition-colors hover:border-foreground/30 hover:bg-muted hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           )}
         >
           {n}
-        </button>
+        </motion.button>
       ))}
     </span>
   );
@@ -149,14 +162,36 @@ function SourceCard({ citation, active }: SourceCardProps) {
   const eur = eurLexHref(citation);
 
   return (
-    <article
+    // Per CLAUDE.md: hover/focus state changes go through Framer Motion.
+    // The card animates border + bg via whileHover and the active
+    // (chip-clicked) state via animate. The article element is wrapped
+    // in motion.article so the variants drive both the hover and
+    // active states through a single declarative API.
+    <motion.article
       data-citation-id={citation.source.id}
       data-active={active ? "true" : undefined}
+      initial={false}
+      animate={active ? "active" : "rest"}
+      whileHover="hover"
+      variants={{
+        rest: {
+          borderColor: "color-mix(in oklch, var(--border) 50%, transparent)",
+          backgroundColor: "color-mix(in oklch, var(--card) 30%, transparent)",
+        },
+        hover: {
+          borderColor: "color-mix(in oklch, var(--border) 100%, transparent)",
+          backgroundColor: "color-mix(in oklch, var(--card) 60%, transparent)",
+          transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+        },
+        active: {
+          borderColor: "color-mix(in oklch, var(--foreground) 30%, transparent)",
+          backgroundColor: "color-mix(in oklch, var(--card) 70%, transparent)",
+          transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+        },
+      }}
       className={cn(
-        "group flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-card/30",
-        "transition-colors duration-200 hover:border-border hover:bg-card/60",
-        "focus-within:border-border focus-within:bg-card/60",
-        "data-[active=true]:border-foreground/30 data-[active=true]:bg-card/70"
+        "group flex items-stretch overflow-hidden rounded-lg border",
+        "focus-within:border-border"
       )}
     >
       <a
@@ -201,25 +236,47 @@ function SourceCard({ citation, active }: SourceCardProps) {
             </span>
           ) : null}
         </span>
-        <ExternalLink
+        {/*
+         * The "external link" arrow nudges up-and-right on hover via
+         * Framer Motion (not CSS transition-transform). The wrapper
+         * carries the whileHover so the transform animates smoothly.
+         */}
+        <motion.span
           aria-hidden="true"
-          className="mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-        />
+          whileHover={{ x: 2, y: -2 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-0.5 shrink-0 text-muted-foreground"
+        >
+          <ExternalLink className="size-3" />
+        </motion.span>
       </a>
-      <a
+      {/*
+       * The EUR-Lex "side action" button gets a per-anchor hover via
+       * Framer Motion. We can't easily make it inherit the parent
+       * group's variant, so it has its own whileHover.
+       */}
+      <motion.a
         href={eur}
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
+        whileHover={{
+          backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
+          color: "var(--foreground)",
+        }}
+        whileFocus={{
+          backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
+          color: "var(--foreground)",
+        }}
+        transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
           "flex shrink-0 items-center justify-center border-l border-border/40 px-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground",
-          "transition-colors hover:bg-muted/40 hover:text-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         )}
       >
         EUR-Lex
-      </a>
-    </article>
+      </motion.a>
+    </motion.article>
   );
 }
 

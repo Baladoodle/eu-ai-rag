@@ -69,21 +69,42 @@ export function SuggestedQuestions({
     >
       {questions.map((question) => (
         <motion.li key={question.id} variants={chipVariants} className="h-full">
-          <button
+          {/*
+           * Per CLAUDE.md: use Framer Motion for hover/focus state changes.
+           * We drive border + background on whileHover/whileFocus so the
+           * transition feels in-system with the message entry animation.
+           */}
+          <motion.button
             type="button"
             onClick={() => onSelect(question.text)}
+            whileHover={{
+              borderColor: "color-mix(in oklch, var(--border) 100%, transparent)",
+              backgroundColor: "color-mix(in oklch, var(--card) 70%, transparent)",
+            }}
+            whileFocus={{
+              borderColor: "color-mix(in oklch, var(--border) 100%, transparent)",
+              backgroundColor: "color-mix(in oklch, var(--card) 70%, transparent)",
+            }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
               "group flex h-full w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-4 py-3.5 text-left text-sm",
-              "hover:border-border hover:bg-card/70",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             )}
           >
             <span className="text-balance text-foreground/90">{question.text}</span>
-            <ArrowUpRight
+            {/*
+             * The arrow nudges on hover via Framer Motion (not CSS
+             * transition-transform). Wrapped in a motion span so the
+             * transform is GPU-friendly and in the same easing family.
+             */}
+            <motion.span
               aria-hidden="true"
-              className="size-3.5 shrink-0 text-muted-foreground group-hover:-translate-y-0.5 group-hover:translate-x-0.5 motion-safe:transition-transform motion-safe:duration-150"
-            />
-          </button>
+              className="shrink-0 text-muted-foreground"
+              whileHover={{ x: 2, y: -2 }}
+            >
+              <ArrowUpRight className="size-3.5" />
+            </motion.span>
+          </motion.button>
         </motion.li>
       ))}
     </motion.ul>

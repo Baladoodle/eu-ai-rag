@@ -210,7 +210,18 @@ export function BrowseTheAct({ onSelectArticle, className }: BrowseTheActProps) 
       variants={fadeInVariants}
       className={cn("mx-auto w-full max-w-2xl px-4 pb-2", className)}
     >
-      <div className="rounded-xl border border-border/50 bg-card/30">
+      {/*
+       * Per CLAUDE.md: hover state changes go through Framer Motion.
+       * The card's background brightens on hover via whileHover so the
+       * interaction matches the rest of the chat's motion language.
+       */}
+      <motion.div
+        whileHover={{
+          backgroundColor: "color-mix(in oklch, var(--card) 50%, transparent)",
+        }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="rounded-xl border border-border/50 bg-card/30"
+      >
         <Button
           type="button"
           variant="ghost"
@@ -230,7 +241,7 @@ export function BrowseTheAct({ onSelectArticle, className }: BrowseTheActProps) 
             Open
           </span>
         </Button>
-      </div>
+      </motion.div>
 
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent
@@ -280,12 +291,31 @@ function ChapterBlock({ chapter, onSelectArticle }: ChapterBlockProps) {
       <ul role="list" className="flex flex-col">
         {chapter.articles.map((article) => (
           <li key={article.number}>
-            <button
+            {/*
+             * Per CLAUDE.md: hover background + search-icon reveal go
+             * through Framer Motion. The button drives both the bg
+             * (via whileHover) and the search-icon opacity (via
+             * variants scoped to the parent group) so the reveal is
+             * in the same easing family as the rest of the chat.
+             */}
+            <motion.button
               type="button"
               onClick={() => onSelectArticle(article)}
+              whileHover="hover"
+              whileFocus="hover"
+              initial="rest"
+              animate="rest"
+              variants={{
+                rest: {
+                  backgroundColor: "color-mix(in oklch, var(--muted) 0%, transparent)",
+                },
+                hover: {
+                  backgroundColor: "color-mix(in oklch, var(--muted) 60%, transparent)",
+                  transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] },
+                },
+              }}
               className={cn(
                 "group flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-xs",
-                "hover:bg-muted/60",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               )}
             >
@@ -293,11 +323,20 @@ function ChapterBlock({ chapter, onSelectArticle }: ChapterBlockProps) {
                 Art.&nbsp;{article.number}
               </span>
               <span className="flex-1 text-foreground/90">{article.title}</span>
-              <Search
+              {/* The search icon is a child motion span that inherits
+                  the parent's variant state — when the parent is in
+                  "hover", the child reveals. */}
+              <motion.span
                 aria-hidden="true"
-                className="size-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100"
-              />
-            </button>
+                variants={{
+                  rest: { opacity: 0 },
+                  hover: { opacity: 1, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } },
+                }}
+                className="shrink-0 text-muted-foreground"
+              >
+                <Search className="size-3" />
+              </motion.span>
+            </motion.button>
           </li>
         ))}
       </ul>
