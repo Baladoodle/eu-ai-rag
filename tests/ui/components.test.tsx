@@ -50,9 +50,9 @@ describe("EmptyState", () => {
         onSelect={() => {}}
       />
     );
-    expect(html).toContain("EU AI Act Expert");
+    expect(html).toContain("Regulation (EU) 2024/1689");
     expect(html).toContain("Hello?");
-    expect(html).toContain("Ask anything about Regulation (EU) 2024/1689.");
+    expect(html).toContain("Ask about the EU AI Act.");
   });
 });
 
