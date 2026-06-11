@@ -388,10 +388,12 @@ function buildMockAnswerStream(
  *   "Based on the EU AI Act, here's what the retrieved sources say
  *    about "<question>":
  *
- *    <one-sentence framing claim> [1]. <next claim, possibly about
- *    the same source> [2]. <next claim> [3] ...
+ *    <one-sentence claim> [1]. <next claim> [2]. <next claim> [3]."
  *
- *    This is a MOCK-mode synthesized answer. Set ANTHROPIC_API_KEY
+ *    Note: every body sentence is joined into a single paragraph so
+ *    the renderer's inline [n] chips stay inline with the prose.
+ *
+ *    "This is a MOCK-mode synthesized answer. Set ANTHROPIC_API_KEY
  *    to get a real LLM response with prompt caching."
  *
  * Why prose, not a bulleted list:
@@ -446,13 +448,19 @@ function composeMockAnswer(options: GenerateOptions): string {
 
   // Body: up to three sentences, each ending with an inline [n]
   // marker. The first retrieved chunk gets the lead claim; later
-  // chunks add supporting points.
+  // chunks add supporting points. We join all body sentences into
+  // ONE paragraph with single spaces so the inline citation chips
+  // land at the end of each sentence rather than on their own lines.
+  // (Markdown soft breaks between lines would push each [n] onto a
+  // new paragraph after the renderer splits on the token.)
   const bodyLimit = Math.min(retrieval.length, 3);
+  const bodyClaims: string[] = [];
   for (let i = 0; i < bodyLimit; i++) {
     const chunk = retrieval[i]!;
     const claim = claimFromChunk(chunk);
-    lines.push(`${claim} [${i + 1}].`);
+    bodyClaims.push(`${claim} [${i + 1}].`);
   }
+  lines.push(bodyClaims.join(" "));
 
   lines.push("");
   lines.push(
