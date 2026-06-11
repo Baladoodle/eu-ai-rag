@@ -78,19 +78,30 @@ export interface UseChatHistory {
 }
 
 /**
- * Read all conversations from localStorage. Defensive: returns [] on
- * any failure (missing key, malformed JSON, quota blocked, etc.).
+ * Snapshot cache and stable server snapshot.
  *
- * Returns a NEW array each call so the snapshot can be compared
- * referentially by useSyncExternalStore (which fires re-renders on
- * new references). The cost is small — parse + filter — and the
- * store is only re-read on storage events and explicit writes.
+ * useSyncExternalStore requires getSnapshot AND getServerSnapshot
+ * to return referentially stable values: if the snapshot is `!==`
+ * the previous one, React schedules a re-render. Returning a freshly
+ * parsed array on every call would therefore cause an infinite
+ * re-render loop.
+ *
+ * - SERVER_SNAPSHOT: a single empty array reused forever.
+ * - cachedRaw / cachedParsed: client cache keyed on the raw
+ *   localStorage string. When nothing has changed (the user is just
+ *   looking at the UI), we return the same array reference. The
+ *   cache is invalidated automatically when writeAndStore() writes
+ *   new data and dispatches INTERNAL_EVENT, which makes the store
+ *   re-read.
  */
-function readAll(): Conversation[] {
-  if (typeof window === "undefined") return [];
+const SERVER_SNAPSHOT: Conversation[] = [];
+
+let cachedRaw: string | null | undefined = undefined; // undefined = never read
+let cachedParsed: Conversation[] = SERVER_SNAPSHOT;
+
+function parseConversations(raw: string | null): Conversation[] {
+  if (!raw) return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(isConversation);
@@ -98,6 +109,20 @@ function readAll(): Conversation[] {
     log.warn({ error: String(error) }, "chat.history.read.failed");
     return [];
   }
+}
+
+/**
+ * Read all conversations from localStorage. Defensive: returns
+ * SERVER_SNAPSHOT (a stable empty array) on any failure or when
+ * called on the server.
+ */
+function readAll(): Conversation[] {
+  if (typeof window === "undefined") return SERVER_SNAPSHOT;
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (raw === cachedRaw) return cachedParsed;
+  cachedRaw = raw;
+  cachedParsed = parseConversations(raw);
+  return cachedParsed;
 }
 
 /**
@@ -148,14 +173,8 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
-/**
- * Server snapshot is always an empty array. useSyncExternalStore
- * uses this on the server and during the first client render to
- * guarantee a stable starting point that doesn't depend on
- * browser-only state.
- */
 function getServerSnapshot(): Conversation[] {
-  return [];
+  return SERVER_SNAPSHOT;
 }
 
 /**
