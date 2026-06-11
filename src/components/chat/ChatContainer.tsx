@@ -264,8 +264,15 @@ export function ChatContainer() {
 
   const handleReset = React.useCallback(() => {
     log.info({ messageCount: messages.length }, "chat.reset");
+    // Start a fresh chat, just like the sidebar's New chat button.
+    // The previous version only cleared messages, which left the
+    // surface on the same id and confused the user (clicking the
+    // header's "New chat" didn't feel like a new chat).
+    const id = createLocalId();
+    setActiveChatId(id);
+    history.setActiveId(id);
     reset();
-  }, [reset, messages.length]);
+  }, [history, reset, messages.length]);
 
   return (
     <div className="flex h-full w-full flex-row">
