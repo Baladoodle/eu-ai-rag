@@ -147,21 +147,27 @@ export function ChatContainer() {
   // chatId doesn't reset it — we have to push the stored messages in
   // ourselves. Without this, clicking a history row showed an empty
   // chat (because the SDK's id tied to the new chatId and reset).
-  // We capture `loadMessages` via a ref so this effect depends only
-  // on `activeChatId` (not on the loadMessages identity, which
-  // changes when the SDK re-renders).
+  //
+  // Both `loadMessages` and `history.get` go through refs. The
+  // effect's dep is only `activeChatId`. Listing `history` directly
+  // would re-fire the effect every render (history is a fresh
+  // object each call) and clobber the chat surface mid-stream —
+  // which is what produced the "question resets and a phantom
+  // New chat entry appears" symptom.
   const loadMessagesRef = React.useRef(loadMessages);
+  const historyGetRef = React.useRef(history.get);
   React.useEffect(() => {
     loadMessagesRef.current = loadMessages;
+    historyGetRef.current = history.get;
   });
   React.useEffect(() => {
-    const stored = history.get(activeChatId);
+    const stored = historyGetRef.current(activeChatId);
     if (stored) {
       loadMessagesRef.current(stored.messages);
     } else {
       loadMessagesRef.current([]);
     }
-  }, [activeChatId, history]);
+  }, [activeChatId]);
 
   // Sidebar collapsed/expanded state. Driven by useSyncExternalStore so
   // the SSR snapshot and the first client paint agree (both read
