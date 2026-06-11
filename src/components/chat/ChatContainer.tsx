@@ -116,12 +116,20 @@ export function ChatContainer() {
     persistRef.current = history.persist;
   });
 
-  // Keep history.activeId in sync with the active chat id. setActiveId
-  // is a useState setter — stable across renders — so this is a
-  // non-issue. We still keep the effect minimal.
+  // Keep history.activeId in sync with the active chat id. We capture
+  // setActiveId via a ref so this effect depends only on activeChatId.
+  // The previous version listed `history` in the deps, but `history`
+  // is a fresh object on every render (the hook doesn't memoize its
+  // return), so the effect re-fired on every render — calling
+  // setActiveId which caused cascading re-renders and a "maximum
+  // update depth exceeded" crash.
+  const setActiveIdRef = React.useRef(history.setActiveId);
   React.useEffect(() => {
-    history.setActiveId(activeChatId);
-  }, [activeChatId, history]);
+    setActiveIdRef.current = history.setActiveId;
+  });
+  React.useEffect(() => {
+    setActiveIdRef.current(activeChatId);
+  }, [activeChatId]);
 
   // Auto-save the live message list to localStorage, debounced inside
   // the hook. We never persist an empty array: an empty chat shouldn't
