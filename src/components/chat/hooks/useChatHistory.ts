@@ -22,6 +22,16 @@
  * Why debounce: every keystroke during a stream produces a `messages`
  * array update. We coalesce to ~500ms so the localStorage write rate
  * stays sane even on long completions.
+ *
+ * Why useSyncExternalStore (not useState + useEffect):
+ *   localStorage is an external store. React 19's recommended way to
+ *   sync with one is `useSyncExternalStore` — it gives us a stable
+ *   server snapshot (empty), a stable client snapshot, and a
+ *   subscribe/notify pair that works for both cross-tab updates
+ *   (the `storage` event) and in-tab updates (our custom
+ *   `INTERNAL_EVENT`). A naive `useState(readAll)` runs the
+ *   initializer on the server (no window) and the client (real
+ *   localStorage) and produces a hydration mismatch.
  * ----------------------------------------------------------------------------
  */
 import { isTextUIPart, type UIMessage } from "ai";
@@ -30,6 +40,12 @@ import * as React from "react";
 import { log } from "@/lib/logger";
 
 const STORAGE_KEY = "eu-ai-act-expert:conversations";
+/**
+ * Custom event fired after in-tab writes so other useSyncExternalStore
+ * subscribers in the same tab re-read localStorage. The native
+ * `storage` event only fires across tabs, not within the same tab.
+ */
+const INTERNAL_EVENT = "eu-ai-act-expert:conversations:update";
 const SAVE_DEBOUNCE_MS = 500;
 /** Hard cap on kept conversations. Oldest are dropped first. */
 const MAX_CONVERSATIONS = 50;
@@ -64,6 +80,11 @@ export interface UseChatHistory {
 /**
  * Read all conversations from localStorage. Defensive: returns [] on
  * any failure (missing key, malformed JSON, quota blocked, etc.).
+ *
+ * Returns a NEW array each call so the snapshot can be compared
+ * referentially by useSyncExternalStore (which fires re-renders on
+ * new references). The cost is small — parse + filter — and the
+ * store is only re-read on storage events and explicit writes.
  */
 function readAll(): Conversation[] {
   if (typeof window === "undefined") return [];
@@ -97,16 +118,44 @@ function isConversation(value: unknown): value is Conversation {
 }
 
 /**
- * Write the full conversation list back to storage. Wrapped in try/catch
- * because some browsers throw on quota exceeded.
+ * Write the full conversation list to storage AND notify in-tab
+ * subscribers. The notification is what makes the same-tab
+ * useSyncExternalStore consumer re-read the store.
  */
-function writeAll(conversations: Conversation[]): void {
+function writeAndStore(conversations: Conversation[]): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+    window.dispatchEvent(new Event(INTERNAL_EVENT));
   } catch (error) {
     log.warn({ error: String(error) }, "chat.history.write.failed");
   }
+}
+
+/**
+ * Subscribe to localStorage changes. The native `storage` event
+ * covers cross-tab updates; the custom INTERNAL_EVENT covers in-tab
+ * updates (writes we make ourselves, so other consumers in the same
+ * tab re-render).
+ */
+function subscribe(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener("storage", callback);
+  window.addEventListener(INTERNAL_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(INTERNAL_EVENT, callback);
+  };
+}
+
+/**
+ * Server snapshot is always an empty array. useSyncExternalStore
+ * uses this on the server and during the first client render to
+ * guarantee a stable starting point that doesn't depend on
+ * browser-only state.
+ */
+function getServerSnapshot(): Conversation[] {
+  return [];
 }
 
 /**
@@ -157,19 +206,49 @@ function nowIso(): string {
 }
 
 /**
- * React hook. Owns the in-memory mirror of localStorage and exposes the
- * mutation API. Memoised so consumers can safely include returned
- * callbacks in their own `useEffect` deps.
+ * Build the next conversations list with one entry replaced/inserted.
+ * Pure helper — no side effects, no I/O — so the persist/create/remove
+ * call sites stay readable.
+ */
+function upsertConversation(
+  current: ReadonlyArray<Conversation>,
+  updated: Conversation,
+): Conversation[] {
+  const idx = current.findIndex((c) => c.id === updated.id);
+  const next =
+    idx >= 0
+      ? current.map((c) => (c.id === updated.id ? updated : c))
+      : [updated, ...current];
+  next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (next.length > MAX_CONVERSATIONS) {
+    return next.slice(0, MAX_CONVERSATIONS);
+  }
+  return next;
+}
+
+/**
+ * React hook. Owns the in-memory mirror of localStorage (via
+ * useSyncExternalStore) and exposes the mutation API. Memoised so
+ * consumers can safely include returned callbacks in their own
+ * `useEffect` deps.
  */
 export function useChatHistory(): UseChatHistory {
-  // We defer the initial read until mount so SSR returns the same empty
-  // shape as a fresh browser session. Without this the server's
-  // representation would diverge from the client and React would
-  // re-render with a hydration warning.
-  const [conversations, setConversations] = React.useState<Conversation[]>(readAll);
+  // useSyncExternalStore is the React 19 way to sync with an
+  // external store. The server snapshot is `[]` (no localStorage on
+  // the server), the client snapshot is the parsed localStorage
+  // value, and subscribe() covers both cross-tab and in-tab updates.
+  // This is the key reason we don't have a hydration mismatch.
+  const conversations = React.useSyncExternalStore(
+    subscribe,
+    readAll,
+    getServerSnapshot,
+  );
+
+  // activeId is purely React state — it does not survive a refresh
+  // and does not need to be in localStorage.
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
-  // The debounce timer survives across renders via a ref. We always
+  // Debounce timer survives across renders via a ref. We always
   // clear it on the next call AND on unmount.
   const debounceRef = React.useRef<number | null>(null);
   const lastPersistRef = React.useRef<{ id: string; messages: UIMessage[] } | null>(null);
@@ -188,70 +267,51 @@ export function useChatHistory(): UseChatHistory {
       debounceRef.current = window.setTimeout(() => {
         const snapshot = lastPersistRef.current;
         if (!snapshot) return;
-        setConversations((prev) => {
-          const idx = prev.findIndex((c) => c.id === snapshot.id);
-          const updated: Conversation = {
-            id: snapshot.id,
-            title:
-              idx >= 0 && prev[idx]?.title && prev[idx]!.title !== "New chat"
-                ? prev[idx]!.title
-                : autoTitle(snapshot.messages) || "New chat",
-            messages: snapshot.messages,
-            createdAt:
-              idx >= 0 ? prev[idx]!.createdAt : nowIso(),
-            updatedAt: nowIso(),
-          };
-          let next: Conversation[];
-          if (idx >= 0) {
-            next = prev.slice();
-            next[idx] = updated;
-          } else {
-            next = [updated, ...prev];
-          }
-          // Cap the list — oldest first get dropped.
-          if (next.length > MAX_CONVERSATIONS) {
-            next = next
-              .slice()
-              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-              .slice(0, MAX_CONVERSATIONS);
-          }
-          // Newest-first ordering for the UI.
-          next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-          writeAll(next);
-          return next;
-        });
+        // Read the current list fresh (don't trust the hook's snapshot
+        // value — it could be stale if multiple tabs are writing).
+        const current = readAll();
+        const idx = current.findIndex((c) => c.id === snapshot.id);
+        const existing = idx >= 0 ? current[idx] : undefined;
+        const updated: Conversation = {
+          id: snapshot.id,
+          title:
+            existing && existing.title && existing.title !== "New chat"
+              ? existing.title
+              : autoTitle(snapshot.messages) || "New chat",
+          messages: snapshot.messages,
+          createdAt: existing ? existing.createdAt : nowIso(),
+          updatedAt: nowIso(),
+        };
+        const next = upsertConversation(current, updated);
+        writeAndStore(next);
       }, SAVE_DEBOUNCE_MS);
     },
-    [activeId]
+    [activeId],
   );
 
-  // Flush the debounced save on unmount so navigating away doesn't drop
-  // a partial in-flight write.
+  // Flush the debounced save on unmount so navigating away doesn't
+  // drop a partial in-flight write.
   React.useEffect(() => {
     return () => {
       if (debounceRef.current != null) {
         window.clearTimeout(debounceRef.current);
         const snapshot = lastPersistRef.current;
         if (snapshot) {
-          setConversations((prev) => {
-            const idx = prev.findIndex((c) => c.id === snapshot.id);
-            const updated: Conversation = {
-              id: snapshot.id,
-              title:
-                idx >= 0 && prev[idx]?.title && prev[idx]!.title !== "New chat"
-                  ? prev[idx]!.title
-                  : autoTitle(snapshot.messages) || "New chat",
-              messages: snapshot.messages,
-              createdAt: idx >= 0 ? prev[idx]!.createdAt : nowIso(),
-              updatedAt: nowIso(),
-            };
-            const next = idx >= 0
-              ? prev.map((c) => (c.id === snapshot.id ? updated : c))
-              : [updated, ...prev];
-            next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-            writeAll(next);
-            return next;
-          });
+          const current = readAll();
+          const idx = current.findIndex((c) => c.id === snapshot.id);
+          const existing = idx >= 0 ? current[idx] : undefined;
+          const updated: Conversation = {
+            id: snapshot.id,
+            title:
+              existing && existing.title && existing.title !== "New chat"
+                ? existing.title
+                : autoTitle(snapshot.messages) || "New chat",
+            messages: snapshot.messages,
+            createdAt: existing ? existing.createdAt : nowIso(),
+            updatedAt: nowIso(),
+          };
+          const next = upsertConversation(current, updated);
+          writeAndStore(next);
         }
       }
     };
@@ -261,7 +321,7 @@ export function useChatHistory(): UseChatHistory {
     (id: string): Conversation | null => {
       return conversations.find((c) => c.id === id) ?? null;
     },
-    [conversations]
+    [conversations],
   );
 
   const create = React.useCallback((): string => {
@@ -273,38 +333,31 @@ export function useChatHistory(): UseChatHistory {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
-    setConversations((prev) => {
-      const next = [created, ...prev];
-      writeAll(next);
-      return next;
-    });
+    const next = upsertConversation(readAll(), created);
+    writeAndStore(next);
     setActiveId(id);
     log.info({ id }, "chat.history.new");
     return id;
   }, []);
 
-  const remove = React.useCallback(
-    (id: string) => {
-      log.info({ id }, "chat.history.delete");
-      setConversations((prev) => {
-        const next = prev.filter((c) => c.id !== id);
-        writeAll(next);
-        return next;
-      });
-      setActiveId((current) => (current === id ? null : current));
-    },
-    []
-  );
+  const remove = React.useCallback((id: string) => {
+    log.info({ id }, "chat.history.delete");
+    const next = readAll().filter((c) => c.id !== id);
+    writeAndStore(next);
+    setActiveId((current) => (current === id ? null : current));
+  }, []);
 
   const rename = React.useCallback((id: string, title: string) => {
-    setConversations((prev) => {
-      const idx = prev.findIndex((c) => c.id === id);
-      if (idx < 0) return prev;
-      const next = prev.slice();
-      next[idx] = { ...next[idx]!, title, updatedAt: nowIso() };
-      writeAll(next);
-      return next;
-    });
+    const current = readAll();
+    const idx = current.findIndex((c) => c.id === id);
+    if (idx < 0) return;
+    const updated: Conversation = {
+      ...current[idx]!,
+      title,
+      updatedAt: nowIso(),
+    };
+    const next = upsertConversation(current, updated);
+    writeAndStore(next);
   }, []);
 
   return {
