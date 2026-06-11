@@ -152,4 +152,60 @@ describe("prompt", () => {
     expect(out).toMatch(/legal advice/i);
     expect(out).toMatch(/qualified EU regulatory lawyer/i);
   });
+
+  it("requires citations to be inline, never paragraph headers", () => {
+    const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
+    // The rules must say citations must be inline in the prose, not
+    // a header before a paragraph. The phrasing in the rules uses
+    // "inline" and forbids "From source [1]" as a header.
+    expect(out).toMatch(/inline/i);
+    expect(out).toMatch(/From source \[1\]/);
+    // The rule must explicitly forbid starting a paragraph with [1].
+    expect(out).toMatch(/Never start a new paragraph with/);
+  });
+
+  it("includes a positive inline-citation example", () => {
+    const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
+    // The positive example must end a claim with [n] inside the sentence,
+    // not as a header. We anchor on the "Article 5 prohibits" phrasing
+    // because that's the canonical example in the prompt.
+    expect(out).toMatch(/Article 5 prohibits subliminal techniques \[\d+\]/);
+  });
+
+  it("includes a negative 'From source [1]' example marked INCORRECT", () => {
+    const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
+    // The negative example must be present and explicitly marked
+    // as the wrong way to cite. The word "Incorrect" must appear
+    // somewhere near the "From source [1]" example so the model
+    // learns the right rule.
+    expect(out).toMatch(/Incorrect/);
+    expect(out).toMatch(/From source \[1\]: Article 5/);
+  });
+
+  it("recommends 2 to 5 citations per response", () => {
+    const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
+    // The rules should bound citation density: a soft floor (at
+    // least 2) and a soft ceiling (5) with an escape hatch.
+    expect(out).toMatch(/2 to 5 citations|2-5 citations/);
+  });
+
+  it("few-shot example uses inline [n] markers in the prose, not headers", () => {
+    const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
+    // Find the few-shot example block. The example uses
+    // "Under Article 6..." and ends sentences with [n] markers.
+    expect(out).toMatch(/Under Article 6/);
+    expect(out).toMatch(/\[\d+\]\. The system must/);
+    // And the example must NOT use the old "From source [n]:" pattern.
+    expect(out).not.toMatch(/From source \[\d+\]: Under Article 6/);
+  });
+
+  it("explains the [n] marker maps to the n-th item in the rendered Sources list", () => {
+    const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
+    // The Sources section must connect the inline [n] marker to
+    // the n-th item the user sees (with its type label + relevance
+    // score). This is what makes the citation chips in the UI line
+    // up with the prose.
+    expect(out).toMatch(/correspond to the n-th item/);
+    expect(out).toMatch(/relevance score/);
+  });
 });
