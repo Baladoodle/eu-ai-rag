@@ -106,7 +106,23 @@ export function ChatContainer() {
 
   const hasMessages = messages.length > 0;
 
-  // Keep history.activeId in sync with the active chat id.
+  // Capture the persist function via a ref so the auto-save effect
+  // doesn't depend on the `history` object. Why: `history` is a fresh
+  // object on every render (the hook doesn't memoize its return), and
+  // `conversations` is a new reference every time localStorage is
+  // written (cache invalidation). Including `history` in the deps
+  // would re-fire this effect on every render, which would call
+  // `persist`, which would write to localStorage 500ms later, which
+  // would re-fire the cycle. Capturing the stable function via ref
+  // breaks the cycle while still letting us call the latest version.
+  const persistRef = React.useRef(history.persist);
+  React.useEffect(() => {
+    persistRef.current = history.persist;
+  });
+
+  // Keep history.activeId in sync with the active chat id. setActiveId
+  // is a useState setter — stable across renders — so this is a
+  // non-issue. We still keep the effect minimal.
   React.useEffect(() => {
     history.setActiveId(activeChatId);
   }, [activeChatId, history]);
@@ -117,8 +133,8 @@ export function ChatContainer() {
   React.useEffect(() => {
     if (!hasLoadedOnceRef.current && messages.length === 0) return;
     hasLoadedOnceRef.current = true;
-    history.persist(messages);
-  }, [messages, history]);
+    persistRef.current(messages);
+  }, [messages]);
 
   // Sidebar collapsed/expanded state. Driven by useSyncExternalStore so
   // the SSR snapshot and the first client paint agree (both read
