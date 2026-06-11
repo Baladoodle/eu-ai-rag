@@ -84,10 +84,6 @@ export function ChatContainer() {
   // history hook promotes it into the persisted list.
   const [activeChatId, setActiveChatId] = React.useState<string>(() => history.activeId ?? createLocalId());
 
-  // Ref tracks the first time we see a non-empty message list so the
-  // auto-save effect doesn't write the initial empty state to storage.
-  const hasLoadedOnceRef = React.useRef(false);
-
   // The chat hook binds to `activeChatId`. When the user picks a
   // different row in the sidebar we update this state and the SDK
   // remounts the stream with the new id.
@@ -128,11 +124,13 @@ export function ChatContainer() {
   }, [activeChatId, history]);
 
   // Auto-save the live message list to localStorage, debounced inside
-  // the hook. We skip the first empty render via the ref so we never
-  // overwrite storage with the "no messages yet" snapshot.
+  // the hook. We never persist an empty array: an empty chat shouldn't
+  // appear in the history list at all. The previous version used a
+  // hasLoadedOnceRef sentinel to skip just the FIRST empty render,
+  // but that let later "new chat" clicks (with messages cleared back
+  // to []) slip through and create phantom entries.
   React.useEffect(() => {
-    if (!hasLoadedOnceRef.current && messages.length === 0) return;
-    hasLoadedOnceRef.current = true;
+    if (messages.length === 0) return;
     persistRef.current(messages);
   }, [messages]);
 
