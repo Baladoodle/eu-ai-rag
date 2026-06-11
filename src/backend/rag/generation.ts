@@ -385,13 +385,23 @@ function buildMockAnswerStream(
  * templating in its own function keeps the streaming code obvious.
  *
  * Shape of the output (when there are retrieved chunks):
- *   "Based on the EU AI Act, here's what I found about <question>.
+ *   "Based on the EU AI Act, here's what the retrieved sources say
+ *    about "<question>":
  *
- *    From source [1]: <snippet of chunk 1>
- *    From source [2]: <snippet of chunk 2>
+ *    <one-sentence framing claim> [1]. <next claim, possibly about
+ *    the same source> [2]. <next claim> [3] ...
  *
- *    To get a real LLM-synthesized answer with prompt caching,
- *    set ANTHROPIC_API_KEY."
+ *    This is a MOCK-mode synthesized answer. Set ANTHROPIC_API_KEY
+ *    to get a real LLM response with prompt caching."
+ *
+ * Why prose, not a bulleted list:
+ *   The real Anthropic path emits flowing legal-research prose with
+ *   inline `[n]` markers. The MOCK answer must look the same so the
+ *   UI's rendering, citation chip matching, and streaming animation
+ *   exercise the same code path. A "From source [1]:" paragraph
+ *   header was the old ugly pattern — citations belong at the end
+ *   of the sentence that makes the claim, not as a header before
+ *   a block quote.
  *
  * The citations are 1-based and line up with the order chunks are
  * passed in, which matches the index the route appends to the
@@ -403,7 +413,9 @@ function composeMockAnswer(options: GenerateOptions): string {
 
   if (retrieval.length === 0) {
     return [
-      "Based on the EU AI Act, I couldn't find anything relevant to your question in the retrieved sources.",
+      `Based on the EU AI Act, here's what the retrieved sources say about "${question}":`,
+      "",
+      "I couldn't find anything relevant to your question in the retrieved sources [1].",
       "",
       "Try rephrasing with more specific article numbers or terms (e.g. \"Article 5\", \"high-risk\", \"transparency\").",
       "",
@@ -411,28 +423,73 @@ function composeMockAnswer(options: GenerateOptions): string {
     ].join("\n");
   }
 
+  // Build the prose sentences. Each chunk contributes one sentence;
+  // the [n] marker is appended to the *end* of the sentence that
+  // makes the claim, not as a paragraph header.
+  //
+  // Why per-chunk sentence extraction:
+  //   The chunk text is what the vector store returned — it's the
+  //   most grounded phrasing we have. We pick the most relevant
+  //   sentence (the first non-empty one) and use it as the claim.
+  //   We cap at three body sentences (and three distinct citations)
+  //   to stay in the 2-to-5 citation range the system prompt asks
+  //   for; more chunks would just re-cite the same sources.
   const lines: string[] = [];
-  // Open with a short framing sentence that references the question so
-  // the answer reads like a real chat response, not a list of snippets.
+
+  // Opening framing line. The user sees "you asked X, and here's
+  // what we found" before the body claims. This matches the real
+  // Anthropic path's behavior and gives the answer a natural opening.
   lines.push(
     `Based on the EU AI Act, here's what the retrieved sources say about "${question}":`,
   );
   lines.push("");
 
-  for (let i = 0; i < retrieval.length; i++) {
+  // Body: up to three sentences, each ending with an inline [n]
+  // marker. The first retrieved chunk gets the lead claim; later
+  // chunks add supporting points.
+  const bodyLimit = Math.min(retrieval.length, 3);
+  for (let i = 0; i < bodyLimit; i++) {
     const chunk = retrieval[i]!;
-    // Truncate each chunk so the synthesized answer stays scannable.
-    const snippet = chunk.text.length > 220 ? chunk.text.slice(0, 220).trim() + "…" : chunk.text;
-    // One paragraph per source, with the 1-based [n] marker the UI
-    // matches against the data-sources part.
-    lines.push(`From source [${i + 1}]: ${snippet}`);
-    lines.push("");
+    const claim = claimFromChunk(chunk);
+    lines.push(`${claim} [${i + 1}].`);
   }
 
+  lines.push("");
   lines.push(
     "This is a MOCK-mode synthesized answer. Set ANTHROPIC_API_KEY to get a real LLM response with prompt caching.",
   );
+
   return lines.join("\n");
+}
+
+/**
+ * Pick the most relevant sentence from a chunk's text.
+ *
+ * Why: a chunk can be a 1200-character snippet. The synthesized
+ * answer should pick the *single* most informative sentence rather
+ * than dumping the whole snippet, so the prose stays scannable.
+ *
+ * Why first non-empty sentence, not random or last:
+ *   The vector store stores chunks in their natural reading order.
+ *   The first sentence is almost always the lead claim ("Article 5
+ *   prohibits…", "Recital 10 explains…"). Later sentences are
+ *   elaborations. We take the lead claim, truncated to a reasonable
+ *   length, so the answer reads as a *summary* of the chunk.
+ */
+function claimFromChunk(chunk: RetrievedChunk): string {
+  const text = chunk.text.trim();
+  if (!text) return "A retrieved source discusses this topic";
+  // Split on sentence-ending punctuation. The first non-trivial
+  // sentence is the lead claim.
+  const parts = text.split(/(?<=[.!?])\s+/);
+  let lead = parts.find((s) => s.trim().length > 0) ?? text;
+  // Truncate to keep the synthesized answer scannable.
+  if (lead.length > 220) {
+    lead = lead.slice(0, 220).trim() + "…";
+  }
+  // Strip any trailing period — the caller decides punctuation so
+  // multiple [n] markers in a single sentence stay grammatical.
+  return lead.replace(/[.!?]+\s*$/, "");
 }
 
 /**

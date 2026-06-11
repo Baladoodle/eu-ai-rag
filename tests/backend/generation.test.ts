@@ -195,13 +195,95 @@ describe("generation in MOCK=1 mode", () => {
       .join("");
 
     // The answer should:
-    //   - reference the user's question
-    //   - cite each retrieved chunk by 1-based index
+    //   - open with a framing sentence that references the user's question
+    //   - cite each retrieved chunk by 1-based index, in chunk order
+    //   - contain at least 2 inline [n] markers
+    //   - NOT use the old "From source [n]:" paragraph-header pattern
     //   - mention MOCK mode somewhere
-    expect(text).toMatch(/Article 5/);
+    expect(text).toMatch(/Based on the EU AI Act/);
+    expect(text).toMatch(/What is Article 5\?/);
     expect(text).toMatch(/\[1\]/);
     expect(text).toMatch(/\[2\]/);
+    // Inline: citations should appear in the same sentence as the claim,
+    // not as a header before a paragraph.
+    expect(text).not.toMatch(/From source \[\d+\]:/);
+    // Citations should appear in [1] [2] order matching chunk order.
+    const idx1 = text.indexOf("[1]");
+    const idx2 = text.indexOf("[2]");
+    expect(idx1).toBeGreaterThan(-1);
+    expect(idx2).toBeGreaterThan(idx1);
     expect(text.toLowerCase()).toContain("mock");
+  });
+
+  it("opens the synthesized answer with a framing sentence", async () => {
+    const out = await generate({
+      system: "s",
+      messages: [{ role: "user", content: "What is Article 5?" }],
+      chunks: [
+        { id: "a5#1", text: "Article 5 prohibits certain AI practices.", score: 0.9 },
+        { id: "a6#1", text: "Article 6 covers classification rules.", score: 0.8 },
+      ],
+      query: "What is Article 5?",
+    });
+    const text = await drainText(out.stream);
+    // The first non-whitespace line should be the framing opener.
+    expect(text.trimStart().startsWith("Based on the EU AI Act")).toBe(true);
+  });
+
+  it("does not start a paragraph with 'From source ['", async () => {
+    const out = await generate({
+      system: "s",
+      messages: [{ role: "user", content: "What is Article 5?" }],
+      chunks: [
+        { id: "a5#1", text: "Article 5 prohibits certain AI practices.", score: 0.9 },
+        { id: "a6#1", text: "Article 6 covers classification rules.", score: 0.8 },
+        { id: "a50#1", text: "Article 50 requires transparency for chatbots.", score: 0.7 },
+      ],
+      query: "What is Article 5?",
+    });
+    const text = await drainText(out.stream);
+    // The old ugly pattern must be gone — no paragraph begins with
+    // "From source [n]:". This is the central behavior change.
+    expect(text).not.toMatch(/\nFrom source \[\d+\]:/);
+    expect(text).not.toMatch(/^From source \[\d+\]:/);
+  });
+
+  it("contains at least 2 inline [n] markers in the synthesized answer", async () => {
+    const out = await generate({
+      system: "s",
+      messages: [{ role: "user", content: "What is Article 5?" }],
+      chunks: [
+        { id: "a5#1", text: "Article 5 prohibits certain AI practices.", score: 0.9 },
+        { id: "a6#1", text: "Article 6 covers classification rules.", score: 0.8 },
+      ],
+      query: "What is Article 5?",
+    });
+    const text = await drainText(out.stream);
+    const matches = text.match(/\[\d+\]/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps [1] [2] [3] in chunk order in the synthesized answer", async () => {
+    const out = await generate({
+      system: "s",
+      messages: [{ role: "user", content: "What is Article 5?" }],
+      chunks: [
+        { id: "a5#1", text: "Article 5 prohibits certain AI practices.", score: 0.9 },
+        { id: "a6#1", text: "Article 6 covers classification rules.", score: 0.8 },
+        { id: "a50#1", text: "Article 50 requires transparency for chatbots.", score: 0.7 },
+      ],
+      query: "What is Article 5?",
+    });
+    const text = await drainText(out.stream);
+    // The first occurrence of [1] must come before the first
+    // occurrence of [2], which must come before [3]. This is what
+    // makes the inline citation chips line up with the prose.
+    const idx1 = text.indexOf("[1]");
+    const idx2 = text.indexOf("[2]");
+    const idx3 = text.indexOf("[3]");
+    expect(idx1).toBeGreaterThan(-1);
+    expect(idx2).toBeGreaterThan(idx1);
+    expect(idx3).toBeGreaterThan(idx2);
   });
 
   it("emits a sensible refusal when there are no chunks", async () => {
@@ -246,3 +328,24 @@ describe("generation in MOCK=1 mode", () => {
     expect(out.ok).toBe(true);
   });
 });
+
+/**
+ * Drain a UI message stream into a single plain-text string.
+ *
+ * Why a helper:
+ *   Five tests in this file all need the same "iterate the stream,
+ *   collect the text-delta deltas, join them" pattern. Inlining it
+ *   five times obscures the actual assertions.
+ */
+async function drainText(stream: AsyncIterable<unknown>): Promise<string> {
+  const parts: unknown[] = [];
+  for await (const part of stream) parts.push(part);
+  return parts
+    .map((c) => {
+      if (c && typeof c === "object" && (c as { type?: string }).type === "text-delta") {
+        return (c as { delta?: string }).delta ?? "";
+      }
+      return "";
+    })
+    .join("");
+}
