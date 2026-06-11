@@ -250,6 +250,20 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
   // When the chip in the assistant prose is clicked, `active` flips
   // true and we auto-expand so the content is visible immediately.
   const [userExpanded, setUserExpanded] = React.useState(false);
+  // Latch the card open on chip click: the parent sets `active` for
+  // ~3s (to drive the highlight pulse + scroll-into-view) and then
+  // clears it. Without latching, the card would close itself the
+  // moment the highlight fades. Once latched, the user can still
+  // collapse it manually by clicking the header.
+  //
+  // We use the React 19 "previous-value" pattern to sync `active` →
+  // `userExpanded` during render (not in an effect) so the latching
+  // happens the same render the chip click lands, with no flicker.
+  const [prevActive, setPrevActive] = React.useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (active) setUserExpanded(true);
+  }
   const expanded = userExpanded || active;
   const toggleExpanded = React.useCallback(() => {
     setUserExpanded((prev) => !prev);
