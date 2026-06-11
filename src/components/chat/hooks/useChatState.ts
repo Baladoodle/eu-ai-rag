@@ -18,6 +18,17 @@
  * Note: in AI SDK v6 the `api`/`body` props moved off `useChat` and onto
  * a `DefaultChatTransport`. We construct the transport here so callers
  * don't have to.
+ *
+ * Why the SDK's `id` is a stable string and NOT the per-conversation
+ * `chatId` prop:
+ *   The SDK uses `id` as a key for its internal state (messages,
+ *   stream state, request in-flight). Passing the user's chatId here
+ *   would reset the SDK's state on every chat switch — so the
+ *   `loadMessages` call on the OLD chat instance would be silently
+ *   thrown away as the new (empty) chat mounts. Result: clicking a
+ *   history row showed an empty chat. We keep a stable id for the SDK
+ *   and let the parent drive chat switching explicitly via
+ *   `loadMessages` from a useEffect that watches `chatId`.
  * ----------------------------------------------------------------------------
  */
 import { DefaultChatTransport, isDataUIPart, type UIMessage } from "ai";
@@ -57,10 +68,8 @@ function findLatestError(messages: ReadonlyArray<UIMessage>): ChatErrorPayload |
 
 export interface UseChatStateOptions {
   /**
-   * Stable id for the active chat. The AI SDK uses it for stream
-   * correlation and to keep state across remounts. We pass it through
-   * from the history layer so loading a stored conversation feels
-   * identical to resuming a live one.
+   * The user's per-conversation id (used for history persistence).
+   * NOT forwarded to the AI SDK (see file-level comment for why).
    */
   chatId?: string;
 }
@@ -98,17 +107,19 @@ function makeSessionId(): string {
   return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Stable id for the AI SDK's useChat. Constant for the lifetime of
+ * the session so the SDK's internal state (stream, message buffer)
+ * survives chat switches. Chat switching happens via `loadMessages`,
+ * not via a new SDK id.
+ */
+const SDK_CHAT_ID = "mastra-expert-chat";
+
 export function useChatState(options: UseChatStateOptions = {}): UseChatStateResult {
   // Per-browser session id so backend logs can be correlated. Lazily
   // initialised in state so the first render has the id available
   // without touching the ref during render.
   const [sessionId] = React.useState<string>(makeSessionId);
-
-  // The AI SDK identifies a chat by `id`. When the history layer
-  // changes the active conversation we propagate the new id here so
-  // the SDK treats it as a fresh chat (its internal stream state is
-  // tied to the id).
-  const chatId = options.chatId ?? "mastra-expert-chat";
 
   const transport = React.useMemo(
     () =>
@@ -120,7 +131,7 @@ export function useChatState(options: UseChatStateOptions = {}): UseChatStateRes
   );
 
   const chat = useChat({
-    id: chatId,
+    id: SDK_CHAT_ID,
     transport,
     // Throttle the React re-renders a touch during heavy streams so the
     // caret animation isn't fighting text rendering. 50ms is imperceptible
@@ -177,13 +188,18 @@ export function useChatState(options: UseChatStateOptions = {}): UseChatStateRes
   /**
    * Replace the live message list. We log the operation so it's
    * obvious in devtools when the sidebar is re-hydrating state.
+   * The user's chatId is logged for traceability but is intentionally
+   * not used as the SDK's id (see file-level comment).
    */
   const loadMessages = React.useCallback(
     (messages: UIMessage[]) => {
-      log.info({ count: messages.length, chatId }, "chat.state.load");
+      log.info(
+        { count: messages.length, chatId: options.chatId },
+        "chat.state.load",
+      );
       chat.setMessages(messages);
     },
-    [chat, chatId]
+    [chat, options.chatId],
   );
 
   return {

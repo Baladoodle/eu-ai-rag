@@ -134,6 +134,27 @@ export function ChatContainer() {
     persistRef.current(messages);
   }, [messages]);
 
+  // Load stored messages when the active chat changes. The hook's
+  // internal state is keyed on a stable id, so switching the user's
+  // chatId doesn't reset it — we have to push the stored messages in
+  // ourselves. Without this, clicking a history row showed an empty
+  // chat (because the SDK's id tied to the new chatId and reset).
+  // We capture `loadMessages` via a ref so this effect depends only
+  // on `activeChatId` (not on the loadMessages identity, which
+  // changes when the SDK re-renders).
+  const loadMessagesRef = React.useRef(loadMessages);
+  React.useEffect(() => {
+    loadMessagesRef.current = loadMessages;
+  });
+  React.useEffect(() => {
+    const stored = history.get(activeChatId);
+    if (stored) {
+      loadMessagesRef.current(stored.messages);
+    } else {
+      loadMessagesRef.current([]);
+    }
+  }, [activeChatId, history]);
+
   // Sidebar collapsed/expanded state. Driven by useSyncExternalStore so
   // the SSR snapshot and the first client paint agree (both read
   // localStorage on the client, return false on the server), and the
@@ -198,16 +219,12 @@ export function ChatContainer() {
   const handleSelectConversation = React.useCallback(
     (id: string) => {
       log.info({ id }, "chat.history.switch");
-      const stored = history.get(id);
+      // Just switch the id; the activeChatId useEffect above loads
+      // the stored messages (or clears the chat if none).
       setActiveChatId(id);
-      if (stored) {
-        loadMessages(stored.messages);
-      } else {
-        reset();
-      }
       setDrawerOpen(false);
     },
-    [history, loadMessages, reset]
+    [],
   );
 
   const handleDeleteConversation = React.useCallback(
