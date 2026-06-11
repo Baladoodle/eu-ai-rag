@@ -169,36 +169,26 @@ export function ChatHistory({
       </div>
 
       {/*
-       * New-chat button. Always visible (the only persistent affordance
-       * when the rail is collapsed). Uses a square icon-only button in
-       * collapsed mode so the rail stays narrow.
+       * New-chat button. Shown only when the rail is expanded. In
+       * collapsed mode the rail is pure chrome (just the toggle)
+       * and the user starts new chats via the header's button — the
+       * rail's narrow width doesn't have room for both affordances.
        */}
-      <div
-        className={cn(
-          "shrink-0 p-2",
-          // Center the new-chat button in the 56px rail when
-          // collapsed. With only horizontal padding the button was
-          // sitting flush against the left edge.
-          !isExpanded && "flex justify-center"
-        )}
-      >
-        <Button
-          type="button"
-          onClick={onNewChat}
-          variant="default"
-          size={isExpanded ? "sm" : "icon-lg"}
-          aria-label="Start a new conversation"
-          // Why w-full only when expanded: in icon mode the button
-          // is meant to be a square (matching the rail's 56px width
-          // minus padding). The full-width stretch only makes sense
-          // for the expanded layout where the button needs to read as
-          // a primary CTA.
-          className={cn(isExpanded && "w-full justify-start gap-2")}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {isExpanded ? <span>New chat</span> : null}
-        </Button>
-      </div>
+      {isExpanded ? (
+        <div className="shrink-0 p-2">
+          <Button
+            type="button"
+            onClick={onNewChat}
+            variant="default"
+            size="sm"
+            aria-label="Start a new conversation"
+            className="w-full justify-start gap-2"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            <span>New chat</span>
+          </Button>
+        </div>
+      ) : null}
 
       {/*
        * Conversation list. Rendered only when the rail is expanded. In
