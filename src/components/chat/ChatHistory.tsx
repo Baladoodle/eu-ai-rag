@@ -211,7 +211,7 @@ export function ChatHistory({
        * transitions feel intentional.
        */}
       {isExpanded ? (
-        <div className="flex-1 overflow-y-auto px-2 pb-3">
+        <div className="flex-1 overflow-y-auto px-2 pt-1 pb-3">
           {conversations.length === 0 ? (
             <EmptyHistory />
           ) : (
@@ -302,6 +302,7 @@ function HistoryRow({ conversation, active, onSelect, onDelete }: HistoryRowProp
        * colour when the row is active.
        */}
       <motion.div
+        onClick={onSelect}
         animate={active ? "active" : "rest"}
         whileHover="hover"
         initial={false}
@@ -318,8 +319,17 @@ function HistoryRow({ conversation, active, onSelect, onDelete }: HistoryRowProp
             transition: { duration: duration.fast, ease: easeOut },
           },
         }}
+        // Why onClick on the outer container (not just the title
+        // button): only the title span was a real <button>, so the
+        // padding around it was a dead click zone — clicking outside
+        // the title did nothing, which felt like a "double click"
+        // (click → nothing → click the title → loads). The title
+        // button stays for keyboard / screen-reader access, but
+        // mouse users now get the whole row as a target. The trash
+        // button below uses stopPropagation so the row click doesn't
+        // also fire.
         className={cn(
-          "group relative flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left",
+          "group relative flex w-full cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-left",
           "focus-within:ring-2 focus-within:ring-ring/40"
         )}
       >
