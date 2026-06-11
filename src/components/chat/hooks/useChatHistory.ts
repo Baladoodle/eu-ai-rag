@@ -225,6 +225,33 @@ function nowIso(): string {
 }
 
 /**
+ * Decide whether a `persist` call represents a real user send (i.e., a
+ * new user message) or just a view/stream of an existing conversation.
+ *
+ * Rule: `updatedAt` only advances when the count of user-role messages
+ * strictly grows. Viewing a chat re-loads the same messages (no count
+ * delta). Streaming grows the assistant message but the user count
+ * is unchanged. Only an actual `send` adds another user message and
+ * should bump the timestamp.
+ *
+ * Why not "compare message arrays": deep equality is O(n) per persist
+ * and the AI SDK emits a new array reference on every render. The
+ * user-count delta is O(1) and matches the user's intent exactly.
+ */
+function nextUpdatedAt(
+  existing: Conversation | undefined,
+  next: ReadonlyArray<UIMessage>,
+): string {
+  const existingUserCount = existing
+    ? existing.messages.filter((m) => m.role === "user").length
+    : 0;
+  const nextUserCount = next.filter((m) => m.role === "user").length;
+  const isUserSend = nextUserCount > existingUserCount;
+  if (isUserSend) return nowIso();
+  return existing?.updatedAt ?? nowIso();
+}
+
+/**
  * Build the next conversations list with one entry replaced/inserted.
  * Pure helper — no side effects, no I/O — so the persist/create/remove
  * call sites stay readable.
@@ -299,7 +326,9 @@ export function useChatHistory(): UseChatHistory {
               : autoTitle(snapshot.messages) || "New chat",
           messages: snapshot.messages,
           createdAt: existing ? existing.createdAt : nowIso(),
-          updatedAt: nowIso(),
+          // Only bumps on a real send. See `nextUpdatedAt` for the
+          // rule (view + stream do not advance the timestamp).
+          updatedAt: nextUpdatedAt(existing, snapshot.messages),
         };
         const next = upsertConversation(current, updated);
         writeAndStore(next);
@@ -327,7 +356,7 @@ export function useChatHistory(): UseChatHistory {
                 : autoTitle(snapshot.messages) || "New chat",
             messages: snapshot.messages,
             createdAt: existing ? existing.createdAt : nowIso(),
-            updatedAt: nowIso(),
+            updatedAt: nextUpdatedAt(existing, snapshot.messages),
           };
           const next = upsertConversation(current, updated);
           writeAndStore(next);
