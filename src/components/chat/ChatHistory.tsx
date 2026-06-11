@@ -180,7 +180,12 @@ export function ChatHistory({
           variant="default"
           size={isExpanded ? "sm" : "icon-sm"}
           aria-label="Start a new conversation"
-          className={cn("w-full", isExpanded && "justify-start gap-2")}
+          // Why w-full only when expanded: in icon mode the button
+          // is meant to be a square (matching the rail's 56px width
+          // minus padding). The full-width stretch only makes sense
+          // for the expanded layout where the button needs to read as
+          // a primary CTA.
+          className={cn(isExpanded && "w-full justify-start gap-2")}
         >
           <Plus className="size-3.5" aria-hidden="true" />
           {isExpanded ? <span>New chat</span> : null}
