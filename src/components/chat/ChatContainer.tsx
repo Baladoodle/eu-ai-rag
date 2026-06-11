@@ -210,6 +210,19 @@ export function ChatContainer() {
     [activeChatId, history, reset]
   );
 
+  const handleClearAll = React.useCallback(() => {
+    log.info({ count: history.conversations.length }, "chat.history.clearAll");
+    // Remove every conversation other than the active one, then delete
+    // the active one too — and reset the chat surface to empty.
+    for (const conversation of history.conversations) {
+      history.remove(conversation.id);
+    }
+    const fresh = createLocalId();
+    setActiveChatId(fresh);
+    history.setActiveId(fresh);
+    reset();
+  }, [history, reset]);
+
   const handleReset = React.useCallback(() => {
     log.info({ messageCount: messages.length }, "chat.reset");
     reset();
@@ -232,6 +245,7 @@ export function ChatContainer() {
           onSelect={handleSelectConversation}
           onNewChat={handleNewChat}
           onDelete={handleDeleteConversation}
+          onClearAll={handleClearAll}
           variant="rail"
         />
       </div>
@@ -343,6 +357,7 @@ export function ChatContainer() {
                 onSelect={handleSelectConversation}
                 onNewChat={handleNewChat}
                 onDelete={handleDeleteConversation}
+                onClearAll={handleClearAll}
                 variant="drawer"
                 onCloseDrawer={() => setDrawerOpen(false)}
               />

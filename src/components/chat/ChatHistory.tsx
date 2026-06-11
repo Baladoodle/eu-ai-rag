@@ -76,6 +76,11 @@ export interface ChatHistoryProps {
   onNewChat: () => void;
   onDelete: (id: string) => void;
   /**
+   * Optional: if present, the footer renders a "Clear all" action.
+   * Hidden when there are no conversations so a fresh sidebar stays clean.
+   */
+  onClearAll?: () => void;
+  /**
    * If non-null, we're rendering inside a mobile drawer and the parent
    * is responsible for closing it after a selection. The button gets a
    * slightly different hit-area in this mode (full-width, easier to tap).
@@ -93,6 +98,7 @@ export function ChatHistory({
   onSelect,
   onNewChat,
   onDelete,
+  onClearAll,
   variant = "rail",
   onCloseDrawer,
   className,
@@ -223,6 +229,22 @@ export function ChatHistory({
           </ul>
         )}
       </div>
+
+      {/*
+       * Footer — always-visible at the bottom of the rail so the
+       * sidebar has a proper ground and the dead space below the
+       * conversation list reads as intentional. Shows a keyboard
+       * shortcut hint and a "Clear all" affordance (visible only when
+       * there are conversations, so a brand-new sidebar stays clean).
+       */}
+      {isExpanded ? (
+        <div className="shrink-0 border-t border-border/40 px-3 py-2.5">
+          <HistoryFooter
+            hasConversations={conversations.length > 0}
+            onClearAll={onClearAll}
+          />
+        </div>
+      ) : null}
     </aside>
   );
 }
@@ -383,5 +405,35 @@ function HistoryRow({ conversation, active, onSelect, onDelete }: HistoryRowProp
         </AnimatePresence>
       </motion.div>
     </li>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// HistoryFooter — anchors the bottom of the rail so the sidebar reads as a
+// complete surface (no dead space below the conversation list). Shows a
+// small keyboard hint + a "Clear all" action.
+// ----------------------------------------------------------------------------
+
+interface HistoryFooterProps {
+  hasConversations: boolean;
+  onClearAll?: () => void;
+}
+
+function HistoryFooter({ hasConversations, onClearAll }: HistoryFooterProps) {
+  return (
+    <div className="flex flex-col gap-1.5 text-[10px] text-muted-foreground/70">
+      <p className="text-pretty">
+        Press <kbd className="rounded border border-border/60 bg-muted/40 px-1 py-px font-mono text-[9px] text-foreground/80">Enter</kbd> to send, <kbd className="rounded border border-border/60 bg-muted/40 px-1 py-px font-mono text-[9px] text-foreground/80">Shift</kbd>+<kbd className="rounded border border-border/60 bg-muted/40 px-1 py-px font-mono text-[9px] text-foreground/80">Enter</kbd> for newline
+      </p>
+      {hasConversations && onClearAll ? (
+        <button
+          type="button"
+          onClick={onClearAll}
+          className="self-start rounded text-[10px] text-muted-foreground underline decoration-muted-foreground/30 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          Clear all conversations
+        </button>
+      ) : null}
+    </div>
   );
 }
