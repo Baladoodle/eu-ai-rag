@@ -19,7 +19,7 @@
  * Mirrors the convention set by ChatGPT, Claude.ai, Linear, etc.
  * ----------------------------------------------------------------------------
  */
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { MessageSquare, PanelLeftClose, PanelLeftOpen, Plus, Trash2, X } from "lucide-react";
 import * as React from "react";
 
@@ -290,7 +290,6 @@ interface HistoryRowProps {
 }
 
 function HistoryRow({ conversation, active, onSelect, onDelete }: HistoryRowProps) {
-  const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const count = messageCount(conversation);
   const dateLabel = relativeDate(conversation.updatedAt);
 
@@ -355,60 +354,21 @@ function HistoryRow({ conversation, active, onSelect, onDelete }: HistoryRowProp
         </button>
 
         {/*
-         * Delete affordance. Single click reveals a small "Delete?"
-         * confirm popover (no modal, no navigation). Second click on
-         * the destructive button commits the delete. A second click on
-         * the cancel button — or Esc — dismisses the popover.
+         * Delete affordance. Single click deletes immediately — no
+         * confirm popover. The user can always re-start a new chat
+         * with the `+` button, so the friction of a confirm step
+         * costs more than the safety it provides.
          */}
-        <AnimatePresence mode="wait" initial={false}>
-          {confirmingDelete ? (
-            <motion.div
-              key="confirm"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: duration.fast, ease: easeOut }}
-              className="flex items-center gap-1"
-            >
-              <Button
-                type="button"
-                size="xs"
-                variant="destructive"
-                onClick={() => {
-                  onDelete();
-                  setConfirmingDelete(false);
-                }}
-                aria-label="Confirm delete conversation"
-              >
-                Delete
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => setConfirmingDelete(false)}
-                aria-label="Cancel delete"
-              >
-                Cancel
-              </Button>
-            </motion.div>
-          ) : (
-            <motion.button
-              key="trash"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setConfirmingDelete(true);
-              }}
-              whileHover={{ color: "var(--destructive)" }}
-              transition={{ duration: duration.fast, ease: easeOut }}
-              aria-label={`Delete ${conversation.title}`}
-              className="shrink-0 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-            >
-              <Trash2 className="size-3" aria-hidden="true" />
-            </motion.button>
-          )}
-        </AnimatePresence>
+        <motion.button
+          type="button"
+          onClick={onDelete}
+          whileHover={{ color: "var(--destructive)" }}
+          transition={{ duration: duration.fast, ease: easeOut }}
+          aria-label={`Delete ${conversation.title}`}
+          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+        >
+          <Trash2 className="size-3" aria-hidden="true" />
+        </motion.button>
       </motion.div>
     </li>
   );
