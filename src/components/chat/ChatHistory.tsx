@@ -188,13 +188,18 @@ export function ChatHistory({
       </div>
 
       {/*
-       * Conversation list. ScrollArea handles overflow so the rail
-       * never grows past the viewport. We key the list on the active id
-       * so layout transitions feel intentional.
+       * Conversation list. Rendered only when the rail is expanded. In
+       * collapsed mode the rail is pure chrome (toggle + new chat) so
+       * the list never crowds 56px. The full list returns when the
+       * user expands — see `isExpanded` check below.
+       *
+       * ScrollArea handles overflow so the rail never grows past the
+       * viewport. We key the list on the active id so layout
+       * transitions feel intentional.
        */}
-      <div className="flex-1 overflow-y-auto px-2 pb-3">
-        {isExpanded ? (
-          conversations.length === 0 ? (
+      {isExpanded ? (
+        <div className="flex-1 overflow-y-auto px-2 pb-3">
+          {conversations.length === 0 ? (
             <EmptyHistory />
           ) : (
             <ul role="list" className="flex flex-col gap-0.5">
@@ -208,27 +213,15 @@ export function ChatHistory({
                 />
               ))}
             </ul>
-          )
-        ) : (
-          // Collapsed: icon-only list so the rail is still usable.
-          <ul role="list" className="flex flex-col items-center gap-1">
-            {conversations.slice(0, 8).map((conversation) => (
-              <li key={conversation.id}>
-                <Button
-                  type="button"
-                  onClick={() => onSelect(conversation.id)}
-                  variant={conversation.id === activeId ? "secondary" : "ghost"}
-                  size="icon-sm"
-                  aria-label={`Resume: ${conversation.title}`}
-                  title={conversation.title}
-                >
-                  <MessageSquare className="size-3.5" aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          )}
+        </div>
+      ) : (
+        // Collapsed: chrome only. The conversation list returns when
+        // the user expands the rail. The remaining flex space is
+        // intentional empty chrome — it makes the rail feel anchored
+        // without rendering a tiny icon list that's hard to parse.
+        <div className="flex-1" aria-hidden="true" />
+      )}
 
       {/*
        * Footer — always-visible at the bottom of the rail so the
