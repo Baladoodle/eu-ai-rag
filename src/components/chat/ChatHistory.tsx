@@ -173,12 +173,20 @@ export function ChatHistory({
        * when the rail is collapsed). Uses a square icon-only button in
        * collapsed mode so the rail stays narrow.
        */}
-      <div className={cn("shrink-0 p-2", !isExpanded && "px-1.5")}>
+      <div
+        className={cn(
+          "shrink-0 p-2",
+          // Center the new-chat button in the 56px rail when
+          // collapsed. With only horizontal padding the button was
+          // sitting flush against the left edge.
+          !isExpanded && "flex justify-center"
+        )}
+      >
         <Button
           type="button"
           onClick={onNewChat}
           variant="default"
-          size={isExpanded ? "sm" : "icon-sm"}
+          size={isExpanded ? "sm" : "icon-lg"}
           aria-label="Start a new conversation"
           // Why w-full only when expanded: in icon mode the button
           // is meant to be a square (matching the rail's 56px width
@@ -187,7 +195,7 @@ export function ChatHistory({
           // a primary CTA.
           className={cn(isExpanded && "w-full justify-start gap-2")}
         >
-          <Plus className="size-3.5" aria-hidden="true" />
+          <Plus className="size-4" aria-hidden="true" />
           {isExpanded ? <span>New chat</span> : null}
         </Button>
       </div>
