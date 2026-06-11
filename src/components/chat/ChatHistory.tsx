@@ -416,8 +416,8 @@ function HistoryRow({ conversation, active, onSelect, onDelete }: HistoryRowProp
 
 // ----------------------------------------------------------------------------
 // HistoryFooter — anchors the bottom of the rail so the sidebar reads as a
-// complete surface (no dead space below the conversation list). Shows a
-// small keyboard hint + a "Clear all" action.
+// complete surface (no dead space below the conversation list). Currently
+// just a "Clear all" action, only shown when there are conversations.
 // ----------------------------------------------------------------------------
 
 interface HistoryFooterProps {
@@ -426,20 +426,16 @@ interface HistoryFooterProps {
 }
 
 function HistoryFooter({ hasConversations, onClearAll }: HistoryFooterProps) {
+  if (!hasConversations || !onClearAll) return null;
   return (
-    <div className="flex flex-col gap-1.5 text-[10px] text-muted-foreground/70">
-      <p className="text-pretty">
-        Press <kbd className="rounded border border-border/60 bg-muted/40 px-1 py-px font-mono text-[9px] text-foreground/80">Enter</kbd> to send, <kbd className="rounded border border-border/60 bg-muted/40 px-1 py-px font-mono text-[9px] text-foreground/80">Shift</kbd>+<kbd className="rounded border border-border/60 bg-muted/40 px-1 py-px font-mono text-[9px] text-foreground/80">Enter</kbd> for newline
-      </p>
-      {hasConversations && onClearAll ? (
-        <button
-          type="button"
-          onClick={onClearAll}
-          className="self-start rounded text-[10px] text-muted-foreground underline decoration-muted-foreground/30 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          Clear all conversations
-        </button>
-      ) : null}
+    <div className="flex flex-col text-[10px] text-muted-foreground/70">
+      <button
+        type="button"
+        onClick={onClearAll}
+        className="self-start rounded text-[10px] text-muted-foreground underline decoration-muted-foreground/30 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        Clear all conversations
+      </button>
     </div>
   );
 }
