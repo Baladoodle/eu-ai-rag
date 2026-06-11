@@ -8,10 +8,18 @@
  * with markdown body, optional streaming cursor, and the source citation
  * list once the stream finishes.
  *
- * Citation wiring: the message owns the "active citation index" state.
- * When the user clicks a [n] chip we set it; the SourceList highlights
- * the matching card and scrolls it into view. After a short delay we
- * clear the highlight so the card doesn't stay "selected" forever.
+ * Citation wiring:
+ *   - The `Markdown` component renders inline `[n]` chips inside the
+ *     assistant body. The chip is small, mono, and tinted by the
+ *     citation's type on hover.
+ *   - The `SourceList` shows the full card grid below the body. The
+ *     card has a type stripe, a relevance bar, and an EUR-Lex link.
+ *   - Clicking a chip OR a card sets the `activeIndex`; the
+ *     `useCitationHighlighter` effect scrolls the matching card into
+ *     view and a CSS animation pulses it.
+ *   - Hovering a card sets `hoveredIndex`; the matching inline chips
+ *     dim, so the user can see at a glance which citation is being
+ *     inspected.
  *
  * The streaming cursor is part of the assistant message — a thin
  * inline caret that fades in/out as tokens arrive. We keep the visual
@@ -27,7 +35,12 @@ import * as React from "react";
 
 import { LoadingIndicator } from "@/components/chat/LoadingIndicator";
 import { Markdown } from "@/components/chat/Markdown";
-import { SourceList, CitationChips } from "@/components/chat/SourceCitations";
+import {
+  CitationChips,
+  SourceList,
+  parseCitation,
+  type CitationKind,
+} from "@/components/chat/SourceCitations";
 import { messageVariants } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +75,10 @@ export function Message({ message, isStreaming = false, className }: MessageProp
   const [activeCitation, setActiveCitation] = React.useState<number | null>(null);
   const clearTimerRef = React.useRef<number | null>(null);
 
+  // Which card the user is currently hovering. Used to dim the
+  // matching inline chips in the markdown body.
+  const [hoveredCitation, setHoveredCitation] = React.useState<number | null>(null);
+
   const handleCitationSelect = React.useCallback((index: number) => {
     setActiveCitation(index);
     if (clearTimerRef.current != null) {
@@ -82,6 +99,28 @@ export function Message({ message, isStreaming = false, className }: MessageProp
       }
     };
   }, []);
+
+  // Pre-compute citation metadata so the Markdown component can render
+  // inline chips with the right colour and tooltip per index.
+  const citationKinds = React.useMemo<Record<number, CitationKind>>(() => {
+    const map: Record<number, CitationKind> = {};
+    for (const c of citations) map[c.index] = parseCitation(c).kind;
+    return map;
+  }, [citations]);
+
+  const citationTitles = React.useMemo<Record<number, string>>(() => {
+    const map: Record<number, string> = {};
+    for (const c of citations) map[c.index] = parseCitation(c).label;
+    return map;
+  }, [citations]);
+
+  // Indices of chips that should render dimmed. We dim every chip
+  // except the one being hovered so the link between the card and the
+  // body is unambiguous.
+  const dimmedIndices = React.useMemo<number[] | undefined>(() => {
+    if (hoveredCitation == null) return undefined;
+    return citations.map((c) => c.index).filter((i) => i !== hoveredCitation);
+  }, [hoveredCitation, citations]);
 
   return (
     <motion.article
@@ -115,14 +154,30 @@ export function Message({ message, isStreaming = false, className }: MessageProp
           {isUser ? (
             <p className="whitespace-pre-wrap">{text}</p>
           ) : (
-            <AssistantBody text={text} isStreaming={isStreaming} />
+            <AssistantBody
+              text={text}
+              isStreaming={isStreaming}
+              citationKinds={citationKinds}
+              citationTitles={citationTitles}
+              dimmedIndices={dimmedIndices}
+              onCitationSelect={handleCitationSelect}
+            />
           )}
         </div>
 
         {!isUser && citations.length > 0 ? (
           <div className="w-full">
-            <CitationChips count={citations.length} onSelect={handleCitationSelect} />
-            <SourceList citations={citations} activeIndex={activeCitation} />
+            <CitationChips
+              count={citations.length}
+              kinds={citationKinds}
+              onSelect={handleCitationSelect}
+            />
+            <SourceList
+              citations={citations}
+              activeIndex={activeCitation}
+              hoveredIndex={hoveredCitation}
+              onHoverIndexChange={setHoveredCitation}
+            />
           </div>
         ) : null}
       </div>
@@ -182,7 +237,23 @@ function EurLexMark() {
  * glued to the end of the rendered text. The caret is a real DOM element
  * (not a CSS pseudo-element) so we can animate its opacity with Framer.
  */
-function AssistantBody({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+interface AssistantBodyProps {
+  text: string;
+  isStreaming: boolean;
+  citationKinds: Record<number, CitationKind>;
+  citationTitles: Record<number, string>;
+  dimmedIndices?: number[];
+  onCitationSelect: (index: number) => void;
+}
+
+function AssistantBody({
+  text,
+  isStreaming,
+  citationKinds,
+  citationTitles,
+  dimmedIndices,
+  onCitationSelect,
+}: AssistantBodyProps) {
   const showInitialLoader = isStreaming && text.length === 0;
 
   if (showInitialLoader) {
@@ -195,7 +266,14 @@ function AssistantBody({ text, isStreaming }: { text: string; isStreaming: boole
 
   return (
     <div className="relative">
-      <Markdown>{text}</Markdown>
+      <Markdown
+        citationKinds={citationKinds}
+        citationTitles={citationTitles}
+        dimmedIndices={dimmedIndices}
+        onCitationSelect={onCitationSelect}
+      >
+        {text}
+      </Markdown>
       {isStreaming ? <StreamingCaret /> : null}
     </div>
   );

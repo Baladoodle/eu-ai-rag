@@ -9,16 +9,26 @@
  * and the snippet scrolls if it's long.
  *
  * Two concerns live in this file:
- *   1. CitationChips — the small `[1]` superscript-style references that
- *      appear inline in the markdown. Clicking a chip scrolls to the
- *      matching SourceCard and briefly highlights it via `data-active`.
- *   2. SourceList — the card list that reveals after the message finishes
+ *   1. CitationChips — the small superscript-style buttons that appear
+ *      inline in the assistant markdown. The list rendered here is the
+ *      "old" summary row at the bottom of the message; the inline chips
+ *      in the body text are produced by the Markdown component (see
+ *      `InlineCitationChip`).
+ *   2. SourceList — the cards revealed after the message finishes
  *      streaming (animated by Framer Motion for polish). Each card opens
  *      the source URL AND an EUR-Lex deep link in a new tab.
  *
- * Citation selection: the parent (`Message`) renders CitationChips and
- * SourceList together and threads an `onSelect` handler through both,
- * keeping the chip → card wiring local to the message.
+ * Card design: every source has a "type" (Article / Recital / Annex /
+ * Commission) and a similarity score. The type drives a thin left stripe
+ * in a type-specific colour, a small uppercase tag, and the colour of
+ * the relevance bar at the bottom. The score drives the bar's WIDTH
+ * (not its colour) so the relationship stays scannable: "long bar =
+ * strong match, short bar = weak match". Bar colour always matches
+ * the type accent so the visual grouping is intact.
+ *
+ * Order in the source list ALWAYS matches the [1] [2] [3] order in the
+ * assistant text. We never physically reorder; the type stripe + label
+ * are how the user scans by type without losing reading comprehension.
  * ----------------------------------------------------------------------------
  */
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,46 +42,76 @@ import { cn } from "@/lib/utils";
 import type { Citation } from "@/../api-contract";
 
 // ----------------------------------------------------------------------------
-// Citation parsing
+// Citation parsing & type system
 // ----------------------------------------------------------------------------
 
 /**
- * A citation as the user sees it. We extract the article/recital numbers
- * from the source title (or the chunk id) so we can render the article
- * number prominently and the recital number as a secondary line.
- *
- * The EU AI Act's canonical structure is "Article N", "Article N(M)",
- * and "Recital N" — and "Annex N" for the annexes. We try the title
- * first, then fall back to a suffix on the id, then to a generic label.
+ * The "kind" of regulation entry. Drives colour, label, and stripe.
+ *  - "article" — articles in the main body of the Act
+ *  - "recital" — recitals (the "whereas" clauses)
+ *  - "annex"   — annexes
+ *  - "commission" — Commission guidance / non-binding publications
+ *  - "other"   — fallback for anything we can't classify
  */
+export type CitationKind = "article" | "recital" | "annex" | "commission" | "other";
+
 export interface ParsedCitation {
-  /** "article" | "recital" | "annex" | "other". */
-  kind: "article" | "recital" | "annex" | "other";
+  /** Discriminator for visuals and grouping. */
+  kind: CitationKind;
   /** Article / Recital / Annex number, e.g. "6", "6(1)", "III". */
   number: string;
   /** Human-readable label, e.g. "Article 6(1)". */
   label: string;
+  /** Short, uppercase label we show on the type tag. */
+  typeLabel: string;
 }
 
 const ARTICLE_RE = /article\s+(\d+(?:\([^)]+\))?)/i;
 const RECITAL_RE = /recital\s+(\d+)/i;
 const ANNEX_RE = /annex\s+([ivxlcdm]+|\d+)/i;
+const COMMISSION_RE = /commission|guidance|implementing\s+act|delegated\s+act/i;
 
 export function parseCitation(citation: Citation): ParsedCitation {
   const haystack = `${citation.source.title} ${citation.source.section ?? ""} ${citation.source.id}`;
   const article = haystack.match(ARTICLE_RE);
   if (article?.[1]) {
-    return { kind: "article", number: article[1], label: `Article ${article[1]}` };
+    return { kind: "article", number: article[1], label: `Article ${article[1]}`, typeLabel: "Article" };
   }
   const recital = haystack.match(RECITAL_RE);
   if (recital?.[1]) {
-    return { kind: "recital", number: recital[1], label: `Recital ${recital[1]}` };
+    return { kind: "recital", number: recital[1], label: `Recital ${recital[1]}`, typeLabel: "Recital" };
   }
   const annex = haystack.match(ANNEX_RE);
   if (annex?.[1]) {
-    return { kind: "annex", number: annex[1], label: `Annex ${annex[1]}` };
+    return { kind: "annex", number: annex[1], label: `Annex ${annex[1]}`, typeLabel: "Annex" };
   }
-  return { kind: "other", number: "", label: citation.source.title };
+  if (haystack.match(COMMISSION_RE)) {
+    return { kind: "commission", number: "", label: citation.source.title, typeLabel: "Commission" };
+  }
+  return { kind: "other", number: "", label: citation.source.title, typeLabel: "Source" };
+}
+
+/**
+ * oklch accent per type. The numbers are chosen to read as the four
+ * "regulation colours" outlined in the brief: warm accent for articles
+ * (the regulation's main body), muted blue for recitals, sage for
+ * annexes, neutral for Commission guidance. "Other" gets the warm
+ * primary so it never disappears.
+ */
+const TYPE_ACCENT_OKLCH: Record<CitationKind, string> = {
+  article: "oklch(0.86 0.06 80)",     // warm ochre (matches --primary)
+  recital: "oklch(0.7 0.05 230)",     // muted blue
+  annex: "oklch(0.75 0.05 150)",      // sage
+  commission: "oklch(0.78 0.012 80)", // warm neutral
+  other: "oklch(0.86 0.06 80)",       // fall back to warm accent
+};
+
+/**
+ * Public helper: the accent OKLCH string for a parsed citation. Used by
+ * inline chips too so the chip + card always agree on colour.
+ */
+export function accentForKind(kind: CitationKind): string {
+  return TYPE_ACCENT_OKLCH[kind];
 }
 
 /**
@@ -91,7 +131,57 @@ export function eurLexHref(citation: Citation): string {
 }
 
 // ----------------------------------------------------------------------------
-// CitationChips — the `[1]` markers inside the assistant text.
+// CitationChip — the small inline `[n]` marker.
+// ----------------------------------------------------------------------------
+
+interface CitationChipProps {
+  /** 1-based index of the citation this chip represents. */
+  index: number;
+  /** Click handler — the parent (Message) handles scroll + highlight. */
+  onSelect?: (index: number) => void;
+  /** Type kind — drives the accent colour on hover. */
+  kind: CitationKind;
+  /** Optional tooltip / aria description. */
+  title?: string;
+  /** Dimmed state — true while a paired source card is being hovered. */
+  dimmed?: boolean;
+}
+
+export function CitationChip({ index, onSelect, kind, title, dimmed = false }: CitationChipProps) {
+  return (
+    <motion.button
+      type="button"
+      data-citation-index={index}
+      data-citation-kind={kind}
+      aria-label={`Jump to source ${index}`}
+      title={title}
+      onClick={() => {
+        log.info({ index, kind }, "citation.chip.click");
+        onSelect?.(index);
+      }}
+      whileHover={{
+        borderColor: accentForKind(kind),
+        color: accentForKind(kind),
+      }}
+      whileFocus={{
+        borderColor: accentForKind(kind),
+        color: accentForKind(kind),
+      }}
+      animate={{ opacity: dimmed ? 0.4 : 1 }}
+      transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+      className={cn(
+        "inline-flex h-[18px] min-w-[18px] cursor-pointer items-center justify-center rounded-md border border-border/60 bg-muted/50 px-1 align-baseline",
+        "font-mono text-[10px] font-medium text-muted-foreground tabular-nums leading-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      )}
+    >
+      {index}
+    </motion.button>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// CitationChips — the summary row at the bottom of the message.
 // ----------------------------------------------------------------------------
 
 interface CitationChipsProps {
@@ -99,9 +189,11 @@ interface CitationChipsProps {
   count: number;
   /** Called with the 1-based index when a chip is clicked. */
   onSelect?: (index: number) => void;
+  /** Kinds per index (1-based), used to colour each chip. */
+  kinds?: Record<number, CitationKind>;
 }
 
-export function CitationChips({ count, onSelect }: CitationChipsProps) {
+export function CitationChips({ count, onSelect, kinds }: CitationChipsProps) {
   if (count <= 0) return null;
 
   return (
@@ -111,67 +203,56 @@ export function CitationChips({ count, onSelect }: CitationChipsProps) {
       className="ml-1 inline-flex items-center gap-1 align-baseline"
     >
       {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
-        // Per CLAUDE.md: hover/focus state changes go through Framer Motion.
-        // The chip animates border + bg + text color via whileHover/whileFocus
-        // so the affordance matches the chat's motion language.
-        <motion.button
+        <CitationChip
           key={n}
-          type="button"
-          role="listitem"
-          aria-label={`Jump to source ${n}`}
-          onClick={() => {
-            log.info({ index: n }, "citation.chip.click");
-            onSelect?.(n);
-          }}
-          whileHover={{
-            borderColor: "color-mix(in oklch, var(--foreground) 30%, transparent)",
-            backgroundColor: "color-mix(in oklch, var(--muted) 100%, transparent)",
-            color: "var(--foreground)",
-          }}
-          whileFocus={{
-            borderColor: "color-mix(in oklch, var(--foreground) 30%, transparent)",
-            backgroundColor: "color-mix(in oklch, var(--muted) 100%, transparent)",
-            color: "var(--foreground)",
-          }}
-          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-          className={cn(
-            "inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-md border border-border/60 bg-muted/50 px-1 align-baseline",
-            "text-[10px] font-medium text-muted-foreground tabular-nums",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          )}
-        >
-          {n}
-        </motion.button>
+          index={n}
+          kind={kinds?.[n] ?? "other"}
+          onSelect={onSelect}
+        />
       ))}
     </span>
   );
 }
 
 // ----------------------------------------------------------------------------
-// SourceCard — one citation row, regulation-aware layout.
+// SourceCard — one citation row.
 // ----------------------------------------------------------------------------
 
 interface SourceCardProps {
   citation: Citation;
+  /** 1-based index in the source list (matches the chip). */
+  index: number;
   /** Toggle highlight on the source card (e.g. when its chip is clicked). */
   active: boolean;
+  /** Hover signal — when true, all matching inline chips dim. */
+  hovered?: boolean;
+  /** When the user hovers anywhere ON the card we tell the parent. */
+  onHoverChange?: (hovered: boolean) => void;
 }
 
-function SourceCard({ citation, active }: SourceCardProps) {
+function SourceCard({ citation, index, active, hovered = false, onHoverChange }: SourceCardProps) {
   const parsed = parseCitation(citation);
   const eur = eurLexHref(citation);
+  const accent = accentForKind(parsed.kind);
+
+  // Clamp score to [0, 1] for the relevance bar width. If the score is
+  // missing or out-of-range we still render the bar at full width as a
+  // neutral default — never < 0%, never wider than the card.
+  const scorePct = Math.max(0, Math.min(1, citation.source.score ?? 0)) * 100;
 
   return (
-    // Per CLAUDE.md: hover/focus state changes go through Framer Motion.
-    // The card animates border + bg via whileHover and the active
-    // (chip-clicked) state via animate. The article element is wrapped
-    // in motion.article so the variants drive both the hover and
-    // active states through a single declarative API.
     <motion.article
       data-citation-id={citation.source.id}
+      data-citation-index={index}
+      data-citation-kind={parsed.kind}
       data-active={active ? "true" : undefined}
+      data-hovered={hovered ? "true" : undefined}
+      onMouseEnter={() => onHoverChange?.(true)}
+      onMouseLeave={() => onHoverChange?.(false)}
+      onFocus={() => onHoverChange?.(true)}
+      onBlur={() => onHoverChange?.(false)}
       initial={false}
-      animate={active ? "active" : "rest"}
+      animate={active ? "active" : hovered ? "hover" : "rest"}
       whileHover="hover"
       variants={{
         rest: {
@@ -190,92 +271,111 @@ function SourceCard({ citation, active }: SourceCardProps) {
         },
       }}
       className={cn(
-        "group flex items-stretch overflow-hidden rounded-lg border",
+        "group relative flex items-stretch overflow-hidden rounded-lg border",
         "focus-within:border-border"
       )}
     >
-      <a
-        href={citation.source.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Open ${parsed.label} on EUR-Lex`}
-        className={cn(
-          "flex flex-1 items-start gap-3 p-3",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        )}
-      >
-        <span
-          aria-hidden="true"
-          className={cn(
-            "mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md",
-            "border border-border/60 bg-muted/40 text-[10px] font-medium text-muted-foreground tabular-nums"
-          )}
-        >
-          {citation.index}
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span
-              className={cn(
-                "font-mono text-base font-semibold leading-none tracking-tight text-foreground",
-                parsed.kind === "recital" && "text-sm font-medium text-muted-foreground",
-                parsed.kind === "annex" && "text-sm font-medium text-muted-foreground"
-              )}
-            >
-              {parsed.label}
-            </span>
-            {parsed.kind === "article" && citation.source.section ? (
-              <span className="truncate text-xs text-muted-foreground">
-                {citation.source.section}
-              </span>
-            ) : null}
+      {/*
+       * Type stripe: a 3-4px left border coloured per type. Implemented
+       * as an inline-block element instead of border-l so we can drive
+       * its colour directly from a CSS variable without re-doing the
+       * motion variants that animate borderColor for the hover/active
+       * states.
+       */}
+      <span
+        aria-hidden="true"
+        style={{ backgroundColor: accent }}
+        className="absolute inset-y-0 left-0 w-[3px]"
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 pl-4 pr-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {/*
+           * Type tag: a small uppercase pill in the type accent. We use
+           * a transparent background and a border in the accent so the
+           * tag never screams for attention; it's a label, not a button.
+           */}
+          <span
+            style={{
+              color: accent,
+              borderColor: `color-mix(in oklch, ${accent} 40%, transparent)`,
+            }}
+            className="rounded border px-1.5 py-px text-[9px] font-semibold uppercase tracking-widest"
+          >
+            {parsed.typeLabel}
           </span>
-          {parsed.kind !== "recital" ? (
-            <span className="max-h-16 overflow-y-auto text-pretty text-xs leading-relaxed text-muted-foreground">
-              {citation.source.snippet}
+          <span className="font-mono text-sm font-semibold leading-none tracking-tight text-foreground tabular-nums">
+            {parsed.label}
+          </span>
+          {citation.source.section && parsed.kind === "article" ? (
+            <span className="truncate text-xs text-muted-foreground">
+              {citation.source.section}
             </span>
           ) : null}
-        </span>
+        </div>
+
         {/*
-         * The "external link" arrow nudges up-and-right on hover via
-         * Framer Motion (not CSS transition-transform). The wrapper
-         * carries the whileHover so the transform animates smoothly.
+         * Snippet: short preview of the retrieved chunk. We clamp to 3
+         * lines so a long recital doesn't push the whole list down. The
+         * user can click the card to expand to the full text.
          */}
-        <motion.span
+        <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground">
+          {citation.source.snippet}
+        </p>
+
+        <div className="mt-0.5 flex items-center gap-2">
+          {/*
+           * EUR-Lex deep link. Drives its own hover colour through Framer
+           * Motion so the affordance matches the rest of the chat.
+           */}
+          <motion.a
+            href={eur}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
+            whileHover={{
+              backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
+              color: "var(--foreground)",
+            }}
+            whileFocus={{
+              backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
+              color: "var(--foreground)",
+            }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="inline-flex items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            EUR-Lex
+            <ExternalLink className="size-2.5" aria-hidden="true" />
+          </motion.a>
+
+          {/*
+           * Score label, small and quiet. The bar is the real signal; the
+           * number is for users who want precision.
+           */}
+          <span className="ml-auto text-[10px] font-mono tabular-nums text-muted-foreground/80">
+            {(citation.source.score * 100).toFixed(0)}%
+          </span>
+        </div>
+
+        {/*
+         * Relevance bar: 2px tall, full width of the card, the WIDTH of
+         * the fill is the only thing that changes. Colour is the type
+         * accent so the visual grouping with the stripe + tag stays
+         * consistent.
+         */}
+        <span
           aria-hidden="true"
-          whileHover={{ x: 2, y: -2 }}
-          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-0.5 shrink-0 text-muted-foreground"
+          className="mt-1 block h-[2px] w-full overflow-hidden rounded-full bg-border/40"
         >
-          <ExternalLink className="size-3" />
-        </motion.span>
-      </a>
-      {/*
-       * The EUR-Lex "side action" button gets a per-anchor hover via
-       * Framer Motion. We can't easily make it inherit the parent
-       * group's variant, so it has its own whileHover.
-       */}
-      <motion.a
-        href={eur}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
-        whileHover={{
-          backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
-          color: "var(--foreground)",
-        }}
-        whileFocus={{
-          backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
-          color: "var(--foreground)",
-        }}
-        transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-        className={cn(
-          "flex shrink-0 items-center justify-center border-l border-border/40 px-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        )}
-      >
-        EUR-Lex
-      </motion.a>
+          <motion.span
+            initial={false}
+            animate={{ width: `${scorePct}%` }}
+            transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+            style={{ backgroundColor: accent }}
+            className="block h-full rounded-full"
+          />
+        </span>
+      </div>
     </motion.article>
   );
 }
@@ -292,6 +392,10 @@ interface SourceListProps {
    * a short pause.
    */
   activeIndex?: number | null;
+  /** Index of the hovered card (for chip dimming). 1-based, or null. */
+  hoveredIndex?: number | null;
+  /** Hover state setter — drives bidirectional dimming with chips. */
+  onHoverIndexChange?: (index: number | null) => void;
   className?: string;
 }
 
@@ -309,14 +413,20 @@ function useCitationHighlighter(
     const container = containerRef.current;
     if (!container) return;
     const card = container.querySelector<HTMLElement>(
-      `[data-citation-id]:nth-of-type(${activeIndex})`
+      `[data-citation-index="${activeIndex}"]`
     );
     if (!card) return;
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeIndex, containerRef]);
 }
 
-export function SourceList({ citations, activeIndex = null, className }: SourceListProps) {
+export function SourceList({
+  citations,
+  activeIndex = null,
+  hoveredIndex = null,
+  onHoverIndexChange,
+  className,
+}: SourceListProps) {
   const containerRef = React.useRef<HTMLUListElement | null>(null);
   useCitationHighlighter(containerRef, activeIndex);
 
@@ -340,7 +450,10 @@ export function SourceList({ citations, activeIndex = null, className }: SourceL
               <li key={citation.source.id}>
                 <SourceCard
                   citation={citation}
+                  index={citation.index}
                   active={activeIndex === citation.index}
+                  hovered={hoveredIndex === citation.index}
+                  onHoverChange={(h) => onHoverIndexChange?.(h ? citation.index : null)}
                 />
               </li>
             ))}

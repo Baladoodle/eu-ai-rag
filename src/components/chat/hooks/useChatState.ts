@@ -8,6 +8,8 @@
  *   - Surfaces only the fields the UI cares about (id of the in-flight
  *     message, error code/message, retry callback) so consumers don't
  *     have to know the SDK's full return shape.
+ *   - Exposes `loadMessages` so the chat history sidebar can swap in a
+ *     stored conversation in one call.
  *
  * Why a hook (not just calling useChat at the call site): the API
  * surface area we need is small and stable, and centralising it here
@@ -21,6 +23,8 @@
 import { DefaultChatTransport, isDataUIPart, type UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 import * as React from "react";
+
+import { log } from "@/lib/logger";
 
 export type ChatErrorPayload = {
   code: string;
@@ -51,6 +55,16 @@ function findLatestError(messages: ReadonlyArray<UIMessage>): ChatErrorPayload |
   return null;
 }
 
+export interface UseChatStateOptions {
+  /**
+   * Stable id for the active chat. The AI SDK uses it for stream
+   * correlation and to keep state across remounts. We pass it through
+   * from the history layer so loading a stored conversation feels
+   * identical to resuming a live one.
+   */
+  chatId?: string;
+}
+
 export interface UseChatStateResult {
   messages: UIMessage[];
   /** ID of the assistant message that is currently streaming, or null. */
@@ -69,17 +83,32 @@ export interface UseChatStateResult {
   reset: () => void;
   /** Convenience: re-send the last user message. */
   retry: () => void;
+  /**
+   * Replace the current messages wholesale. Used by the chat history
+   * sidebar to load a stored conversation in one call. Does not trigger
+   * a network request.
+   */
+  loadMessages: (messages: UIMessage[]) => void;
 }
 
-export function useChatState(): UseChatStateResult {
-  // Generate a stable id per browser session so the backend can correlate
-  // log lines. No PII, no auth — just a correlation key. Lazily initialise
-  // in state so the first render has the id available without touching
-  // the ref during render (refs are only safe to read inside effects /
-  // event handlers under React's rules of hooks).
-  const [sessionId] = React.useState<string>(() =>
-    typeof crypto !== "undefined" ? crypto.randomUUID() : "no-crypto",
-  );
+function makeSessionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function useChatState(options: UseChatStateOptions = {}): UseChatStateResult {
+  // Per-browser session id so backend logs can be correlated. Lazily
+  // initialised in state so the first render has the id available
+  // without touching the ref during render.
+  const [sessionId] = React.useState<string>(makeSessionId);
+
+  // The AI SDK identifies a chat by `id`. When the history layer
+  // changes the active conversation we propagate the new id here so
+  // the SDK treats it as a fresh chat (its internal stream state is
+  // tied to the id).
+  const chatId = options.chatId ?? "mastra-expert-chat";
 
   const transport = React.useMemo(
     () =>
@@ -91,7 +120,7 @@ export function useChatState(): UseChatStateResult {
   );
 
   const chat = useChat({
-    id: "mastra-expert-chat",
+    id: chatId,
     transport,
     // Throttle the React re-renders a touch during heavy streams so the
     // caret animation isn't fighting text rendering. 50ms is imperceptible
@@ -145,6 +174,18 @@ export function useChatState(): UseChatStateResult {
     }
   }, [chat]);
 
+  /**
+   * Replace the live message list. We log the operation so it's
+   * obvious in devtools when the sidebar is re-hydrating state.
+   */
+  const loadMessages = React.useCallback(
+    (messages: UIMessage[]) => {
+      log.info({ count: messages.length, chatId }, "chat.state.load");
+      chat.setMessages(messages);
+    },
+    [chat, chatId]
+  );
+
   return {
     messages: chat.messages,
     streamingMessageId,
@@ -155,5 +196,6 @@ export function useChatState(): UseChatStateResult {
     stop: chat.stop,
     reset,
     retry,
+    loadMessages,
   };
 }

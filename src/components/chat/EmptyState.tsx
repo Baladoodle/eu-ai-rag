@@ -15,8 +15,13 @@
  * Layout: the column is centered vertically in its parent (h-full +
  * justify-center) and uses a 2-step rhythm — 12px between the hero
  * group's pill / heading / paragraphs, and 24px between the hero group
- * and the suggested-question grid. The top-of-screen whitespace is
- * controlled by the parent container, not the empty state itself.
+ * and the suggested-question grid.
+ *
+ * Top breathing room: we apply a generous top padding (pt-24 on small
+ * viewports, pt-32 from sm up) so the hero does not crowd the top edge
+ * of the viewport. On tall viewports the inner column is also centered
+ * via flex, so the whole composition reads as a deliberate hero block
+ * rather than something glued to the header.
  * ----------------------------------------------------------------------------
  */
 import { motion } from "framer-motion";
@@ -41,7 +46,7 @@ export function EmptyState({ questions, onSelect, className }: EmptyStateProps) 
       animate="visible"
       variants={fadeInVariants}
       className={cn(
-        "mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center gap-6 px-4 pb-2 text-center",
+        "mx-auto flex h-full min-h-[60vh] w-full max-w-2xl flex-col items-center justify-center gap-6 px-4 pb-8 pt-24 text-center sm:pt-32",
         className
       )}
     >
