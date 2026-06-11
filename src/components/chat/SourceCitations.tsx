@@ -32,10 +32,10 @@
  * ----------------------------------------------------------------------------
  */
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import * as React from "react";
 
-import { citationPanelVariants } from "@/lib/motion";
+import { citationPanelVariants, duration, easeOut } from "@/lib/motion";
 import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 
@@ -239,6 +239,21 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
   // missing or out-of-range we still render the bar at full width as a
   // neutral default — never < 0%, never wider than the card.
   const scorePct = Math.max(0, Math.min(1, citation.source.score ?? 0)) * 100;
+  const scoreLabel = `${(citation.source.score * 100).toFixed(0)}%`;
+
+  // Why compact by default, expand on click:
+  //   A 10-source answer can produce 10 nearly-identical cards. With
+  //   the snippet + EUR-Lex link + bar visible for each one, the
+  //   sources list scrolls for ages. The compact row gives the user
+  //   the headline (type + label + score) at a glance; the expand
+  //   reveals the snippet + canonical link only when they want it.
+  // When the chip in the assistant prose is clicked, `active` flips
+  // true and we auto-expand so the content is visible immediately.
+  const [userExpanded, setUserExpanded] = React.useState(false);
+  const expanded = userExpanded || active;
+  const toggleExpanded = React.useCallback(() => {
+    setUserExpanded((prev) => !prev);
+  }, []);
 
   return (
     <motion.article
@@ -247,6 +262,7 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
       data-citation-kind={parsed.kind}
       data-active={active ? "true" : undefined}
       data-hovered={hovered ? "true" : undefined}
+      data-expanded={expanded ? "true" : undefined}
       onMouseEnter={() => onHoverChange?.(true)}
       onMouseLeave={() => onHoverChange?.(false)}
       onFocus={() => onHoverChange?.(true)}
@@ -271,12 +287,12 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
         },
       }}
       className={cn(
-        "group relative flex items-stretch overflow-hidden rounded-lg border",
+        "group relative overflow-hidden rounded-lg border",
         "focus-within:border-border"
       )}
     >
       {/*
-       * Type stripe: a 3-4px left border coloured per type. Implemented
+       * Type stripe: a 3px left border coloured per type. Implemented
        * as an inline-block element instead of border-l so we can drive
        * its colour directly from a CSS variable without re-doing the
        * motion variants that animate borderColor for the hover/active
@@ -288,94 +304,140 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
         className="absolute inset-y-0 left-0 w-[3px]"
       />
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5 pl-4 pr-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {/*
-           * Type tag: a small uppercase pill in the type accent. We use
-           * a transparent background and a border in the accent so the
-           * tag never screams for attention; it's a label, not a button.
-           */}
-          <span
-            style={{
-              color: accent,
-              borderColor: `color-mix(in oklch, ${accent} 40%, transparent)`,
-            }}
-            className="rounded border px-1.5 py-px text-[9px] font-semibold uppercase tracking-widest"
-          >
-            {parsed.typeLabel}
-          </span>
-          <span className="font-mono text-sm font-semibold leading-none tracking-tight text-foreground tabular-nums">
-            {parsed.label}
-          </span>
-          {citation.source.section && parsed.kind === "article" ? (
-            <span className="truncate text-xs text-muted-foreground">
-              {citation.source.section}
-            </span>
-          ) : null}
-        </div>
-
-        {/*
-         * Snippet: short preview of the retrieved chunk. We clamp to 3
-         * lines so a long recital doesn't push the whole list down. The
-         * user can click the card to expand to the full text.
-         */}
-        <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground">
-          {citation.source.snippet}
-        </p>
-
-        <div className="mt-0.5 flex items-center gap-2">
-          {/*
-           * EUR-Lex deep link. Drives its own hover colour through Framer
-           * Motion so the affordance matches the rest of the chat.
-           */}
-          <motion.a
-            href={eur}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
-            whileHover={{
-              backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
-              color: "var(--foreground)",
-            }}
-            whileFocus={{
-              backgroundColor: "color-mix(in oklch, var(--muted) 40%, transparent)",
-              color: "var(--foreground)",
-            }}
-            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="inline-flex items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            EUR-Lex
-            <ExternalLink className="size-2.5" aria-hidden="true" />
-          </motion.a>
-
-          {/*
-           * Score label, small and quiet. The bar is the real signal; the
-           * number is for users who want precision.
-           */}
-          <span className="ml-auto text-[10px] font-mono tabular-nums text-muted-foreground/80">
-            {(citation.source.score * 100).toFixed(0)}%
-          </span>
-        </div>
-
-        {/*
-         * Relevance bar: 2px tall, full width of the card, the WIDTH of
-         * the fill is the only thing that changes. Colour is the type
-         * accent so the visual grouping with the stripe + tag stays
-         * consistent.
-         */}
+      {/*
+       * Header row (always visible). Click to toggle expand. The whole
+       * row is a single button so keyboard users get the same affordance
+       * as mouse / touch. The EUR-Lex deep link inside the expanded
+       * panel stops propagation so the click doesn't collapse the card.
+       */}
+      <button
+        type="button"
+        onClick={toggleExpanded}
+        aria-expanded={expanded}
+        aria-controls={`citation-${index}-body`}
+        className="flex w-full min-w-0 items-center gap-2.5 py-1.5 pl-4 pr-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+      >
         <span
           aria-hidden="true"
-          className="mt-1 block h-[2px] w-full overflow-hidden rounded-full bg-border/40"
+          className="flex size-5 shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-semibold tabular-nums"
+          style={{
+            color: accent,
+            backgroundColor: `color-mix(in oklch, ${accent} 14%, transparent)`,
+            borderColor: `color-mix(in oklch, ${accent} 30%, transparent)`,
+            borderWidth: "1px",
+          }}
         >
-          <motion.span
-            initial={false}
-            animate={{ width: `${scorePct}%` }}
-            transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
-            style={{ backgroundColor: accent }}
-            className="block h-full rounded-full"
-          />
+          {index}
         </span>
-      </div>
+
+        <span
+          aria-hidden="true"
+          className="shrink-0 rounded border px-1.5 py-px text-[9px] font-semibold uppercase tracking-widest"
+          style={{
+            color: accent,
+            borderColor: `color-mix(in oklch, ${accent} 40%, transparent)`,
+          }}
+        >
+          {parsed.typeLabel}
+        </span>
+
+        <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold tracking-tight text-foreground/90 tabular-nums">
+          {parsed.label}
+        </span>
+
+        {citation.source.section && parsed.kind === "article" ? (
+          <span className="hidden truncate text-[11px] text-muted-foreground sm:inline">
+            {citation.source.section}
+          </span>
+        ) : null}
+
+        <span
+          aria-hidden="true"
+          className="ml-auto inline-flex items-center gap-1.5 pl-2 text-[10px] font-mono tabular-nums text-muted-foreground/80"
+        >
+          {scoreLabel}
+        </span>
+
+        <motion.span
+          aria-hidden="true"
+          animate={{ rotate: expanded ? 180 : 0 }}
+          transition={{ duration: duration.fast, ease: easeOut }}
+          className="shrink-0 text-muted-foreground/70"
+        >
+          <ChevronDown className="size-3.5" />
+        </motion.span>
+      </button>
+
+      {/*
+       * Expanded body. AnimatePresence + height: auto via framer's
+       * height transition (framer animates the actual height value, not
+       * just opacity, so the layout shift stays smooth).
+       */}
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            key="body"
+            id={`citation-${index}-body`}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-col gap-2 border-t border-border/40 px-4 py-2.5">
+              <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+                {citation.source.snippet}
+              </p>
+
+              <div className="flex items-center gap-3">
+                <motion.a
+                  href={eur}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
+                  onClick={(event) => event.stopPropagation()}
+                  whileHover={{
+                    backgroundColor:
+                      "color-mix(in oklch, var(--muted) 40%, transparent)",
+                    color: "var(--foreground)",
+                  }}
+                  whileFocus={{
+                    backgroundColor:
+                      "color-mix(in oklch, var(--muted) 40%, transparent)",
+                    color: "var(--foreground)",
+                  }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  className="inline-flex items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  EUR-Lex
+                  <ExternalLink className="size-2.5" aria-hidden="true" />
+                </motion.a>
+
+                {/*
+                 * Relevance bar: only when expanded, so the compact
+                 * row stays uncluttered. Same colour = type accent, same
+                 * width = the score, so the visual language is
+                 * consistent.
+                 */}
+                <span
+                  aria-hidden="true"
+                  className="ml-auto inline-flex items-center gap-2"
+                >
+                  <span className="block h-[2px] w-24 overflow-hidden rounded-full bg-border/40">
+                    <motion.span
+                      initial={false}
+                      animate={{ width: `${scorePct}%` }}
+                      transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ backgroundColor: accent }}
+                      className="block h-full rounded-full"
+                    />
+                  </span>
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </motion.article>
   );
 }
