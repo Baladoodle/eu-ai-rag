@@ -113,11 +113,11 @@ export function ChatHistory({
       data-collapsed={!isExpanded ? "true" : undefined}
       className={cn(
         "flex h-full flex-col border-r border-border/40 bg-card/30",
-        // Persistent rail: fixed width, transitions on collapse.
-        variant === "rail" && "transition-[width] duration-200 ease-out",
-        variant === "rail" && (isExpanded ? "w-[280px]" : "w-[56px]"),
         // Drawer mode: always full-width, mobile only.
         variant === "drawer" && "w-[300px] max-w-[85vw]",
+        // Rail mode: the parent in ChatContainer controls the width
+        // (fixed-positioned with conditional width). We only need the
+        // rail to fill its parent; no width logic here.
         className
       )}
     >

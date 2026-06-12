@@ -280,15 +280,25 @@ export function ChatContainer() {
     reset();
   }, [history, reset, messages.length]);
 
+  // Sidebar width is conditional on collapsed state. We pin the
+  // sidebar to position: fixed (below) so the chat column takes the
+  // full viewport width and the centered content (max-w-2xl mx-auto)
+  // is actually centered to the viewport — not to the post-sidebar
+  // area, which would feel "pushed to the right".
+  const sidebarWidth = collapsed ? 56 : 280;
+
   return (
-    <div className="flex h-full w-full flex-row">
+    <>
       {/*
-       * Persistent history rail (md+). We render it as a sibling of the
-       * chat column rather than nesting it so the chat column's max-width
-       * stays anchored to the viewport center, not the post-sidebar
-       * center.
+       * Persistent history rail (md+). Fixed-positioned so it
+       * overlays the chat column rather than pushing it; the chat
+       * column gets the full viewport width and centers its content
+       * to the actual viewport center.
        */}
-      <div className="hidden md:block">
+      <div
+        className="hidden md:block fixed inset-y-0 left-0 z-30 transition-[width] duration-200 ease-out"
+        style={{ width: `${sidebarWidth}px` }}
+      >
         <ChatHistory
           conversations={history.conversations}
           activeId={activeChatId}
@@ -417,7 +427,7 @@ export function ChatContainer() {
           </>
         ) : null}
       </AnimatePresence>
-    </div>
+    </>
   );
 }
 
