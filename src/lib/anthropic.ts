@@ -26,7 +26,7 @@
  *   - Swapping providers (e.g. to Bedrock) means editing one file.
  * ----------------------------------------------------------------------------
  */
-import { anthropic as createAnthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import Anthropic from "@anthropic-ai/sdk";
 import type { LanguageModel } from "ai";
 
@@ -64,6 +64,20 @@ export function getApiKey(): string | undefined {
 }
 
 /**
+ * Read the base URL for the Anthropic-compatible endpoint from the
+ * environment.
+ *
+ * Why this exists: MiniMax, AWS Bedrock, internal gateways, etc. all
+ * speak the Anthropic Messages API but live at a different origin. By
+ * defaulting to undefined (the official API) and letting the SDK pick
+ * its own base, we don't break the happy path. Setting the var to
+ * an Anthropic-compatible URL is enough to route through a proxy.
+ */
+export function getBaseUrl(): string | undefined {
+  return process.env.ANTHROPIC_BASE_URL;
+}
+
+/**
  * Get an AI SDK `LanguageModel` instance pointing at Anthropic.
  *
  * Why the AI SDK provider instead of the raw client for `streamText`:
@@ -78,9 +92,15 @@ export function getApiKey(): string | undefined {
  * if you need identity stability.
  */
 export function getAnthropicModel(): LanguageModel {
-  const model = createAnthropic(getModelId());
-  log.debug({ model: getModelId() }, "anthropic.model.ready");
-  return model;
+  // The AI SDK's Anthropic factory takes the settings object, then we
+  // call the resulting provider as a function to obtain the model.
+  // `baseURL` is the supported way to route to a proxy (e.g. MiniMax,
+  // Bedrock) that speaks the Anthropic Messages API at a different
+  // origin. We pass `undefined` when unset so the SDK uses its
+  // default.
+  const provider = createAnthropic({ baseURL: getBaseUrl() });
+  log.debug({ model: getModelId(), baseUrl: getBaseUrl() }, "anthropic.model.ready");
+  return provider(getModelId());
 }
 
 /**
@@ -96,8 +116,13 @@ export function getAnthropicModel(): LanguageModel {
  */
 export function getAnthropicClient(): Anthropic {
   const apiKey = getApiKey();
+  const baseURL = getBaseUrl();
   return new Anthropic({
     apiKey: apiKey ?? "missing-key-mock",
+    // MiniMax, Bedrock, and other Anthropic-compatible proxies live at
+    // a different origin. The SDK's `baseURL` is the supported way
+    // to point it elsewhere; we pass undefined when unset.
+    baseURL,
     // We don't set `dangerouslyAllowBrowser` — this client is server-only.
   });
 }

@@ -31,6 +31,13 @@ import { z } from "zod";
 const schema = z.object({
   // --- LLM ----------------------------------------------------------------
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  /**
+   * Base URL for the Anthropic API. Defaults to the official endpoint.
+   * Override this to point at a proxy (e.g. MiniMax, AWS Bedrock gateway,
+   * internal mirror) that speaks the Anthropic Messages API with a
+   * compatible key.
+   */
+  ANTHROPIC_BASE_URL: z.string().url().optional(),
 
   // --- Embeddings ---------------------------------------------------------
   /**
