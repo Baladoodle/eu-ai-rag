@@ -20,8 +20,14 @@
  */
 import pino, { type Logger } from "pino";
 
-const isProd = process.env.NODE_ENV === "production";
-const level = process.env.LOG_LEVEL ?? (isProd ? "info" : "debug");
+import { env } from "@/lib/env";
+
+const isProd = env.NODE_ENV === "production";
+// Read level from the validated env so an empty `LOG_LEVEL=` in
+// `.env.local` (which the template ships) becomes `undefined` and
+// falls through to the default — instead of crashing pino with
+// "default level: must be included in custom levels".
+const level = env.LOG_LEVEL ?? (isProd ? "info" : "debug");
 
 /**
  * Build the pino options for the current environment.

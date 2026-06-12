@@ -23,6 +23,16 @@
 import { z } from "zod";
 
 /**
+ * Treat empty strings as "unset" for all optional string vars. The
+ * `.env.example` template ships every var with an empty value
+ * (`KEY=`) so a fresh clone knows which vars exist; without this
+ * preprocess, those empty values would fail downstream consumers
+ * (e.g. pino rejecting an empty `LOG_LEVEL`).
+ */
+const optionalString = z
+  .preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional());
+
+/**
  * Schema for all environment variables used in the app + scripts.
  *
  * Why is `parse()` called and not `safeParse()`? Because at boot, the user
@@ -30,14 +40,17 @@ import { z } from "zod";
  */
 const schema = z.object({
   // --- LLM ----------------------------------------------------------------
-  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: optionalString,
   /**
    * Base URL for the Anthropic API. Defaults to the official endpoint.
    * Override this to point at a proxy (e.g. MiniMax, AWS Bedrock gateway,
    * internal mirror) that speaks the Anthropic Messages API with a
    * compatible key.
    */
-  ANTHROPIC_BASE_URL: z.string().url().optional(),
+  ANTHROPIC_BASE_URL: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().url().optional(),
+  ),
 
   // --- Embeddings ---------------------------------------------------------
   /**
@@ -45,8 +58,8 @@ const schema = z.object({
    * Voyage isn't reachable. We treat the empty string as "unset" so a stray
    * .env line doesn't break the build.
    */
-  VOYAGE_API_KEY: z.string().min(1).optional(),
-  OPENAI_API_KEY: z.string().min(1).optional(),
+  VOYAGE_API_KEY: optionalString,
+  OPENAI_API_KEY: optionalString,
 
   /**
    * The model is switchable so we can A/B test voyage-code-3 vs voyage-3
@@ -59,20 +72,23 @@ const schema = z.object({
     .default("voyage-code-3"),
 
   // --- Vector store -------------------------------------------------------
-  POSTGRES_CONNECTION_STRING: z.string().min(1).optional(),
+  POSTGRES_CONNECTION_STRING: optionalString,
 
   /**
    * "pg" in production, "memory" in dev. We default off the value of
    * `NODE_ENV` but let the user override (e.g. for E2E tests).
    */
-  VECTOR_BACKEND: z.enum(["pg", "memory"]).optional(),
+  VECTOR_BACKEND: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.enum(["pg", "memory"]).optional(),
+  ),
 
   // --- Pipeline toggles ---------------------------------------------------
   /**
    * When `1`, the CLI computes and prints the embedding/upsert plan but
    * performs zero network writes. Used in CI smoke tests.
    */
-  DRY_RUN: z.string().optional(),
+  DRY_RUN: optionalString,
 
   /**
    * Limit the number of items scraped per source. Useful while iterating.
