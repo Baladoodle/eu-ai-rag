@@ -304,44 +304,45 @@ export function ChatContainer() {
 
       <div className="flex h-full w-full min-w-0 flex-col">
         {/*
-         * Minimal top bar: hamburger on the left (mobile only, since
-         * the rail is persistent on md+), brand text centered, and a
-         * New chat button on the right when there are messages.
-         * Intentionally light — the rail carries the full chrome
-         * (HISTORY label, collapse, conversation list, Clear all).
+         * Minimal top bar: shown only when there are messages. On a
+         * fresh chat the bar is hidden — the empty state below
+         * carries the "EU AI Act Expert" brand. When a conversation
+         * has messages, the bar shows the conversation title (set by
+         * `autoTitle` from the first user message) and a New chat
+         * button on the right. The mobile-only hamburger stays on
+         * the left so the drawer is reachable on narrow viewports.
          */}
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-2",
-            "bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/40"
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Open chat history"
-              className="md:hidden"
-            >
-              <Menu className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
+        {hasMessages ? (
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-2",
+              "bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/40"
+            )}
+          >
+            <div className="flex items-center gap-2 md:hidden">
+              <Button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Open chat history"
+              >
+                <Menu className="size-4" aria-hidden="true" />
+              </Button>
+            </div>
 
-          {/*
-           * flex-1 makes the brand text fill the remaining horizontal
-           * space between the left cluster and the right button; text-center
-           * centers it within that space. pointer-events-none keeps the
-           * span out of the click path so it doesn't intercept clicks
-           * on the New chat button.
-           */}
-          <span className="pointer-events-none flex-1 text-center text-sm font-medium tracking-tight">
-            EU AI Act Expert
-          </span>
+            {/*
+             * The title is the conversation's `title` (auto-generated
+             * from the first user message by the hook's `autoTitle`).
+             * `truncate` keeps long titles from breaking the bar.
+             * `pointer-events-none` keeps the span out of the click
+             * path so it doesn't intercept the New chat button.
+             */}
+            <span className="pointer-events-none flex-1 truncate text-center text-sm font-medium tracking-tight">
+              {history.get(activeChatId)?.title ?? "New chat"}
+            </span>
 
-          <div className="flex items-center gap-1">
-            {hasMessages ? (
+            <div className="flex items-center gap-1">
               <Button
                 type="button"
                 onClick={handleNewChat}
@@ -351,9 +352,9 @@ export function ChatContainer() {
               >
                 New chat
               </Button>
-            ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <main className="relative flex flex-1 flex-col overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
