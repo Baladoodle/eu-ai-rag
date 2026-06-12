@@ -305,8 +305,8 @@ export function ChatContainer() {
       <div className="flex h-full w-full min-w-0 flex-col">
         {/*
          * Minimal top bar: hamburger on the left (mobile only, since
-         * the rail is persistent on md+), brand text in the middle, and
-         * a New chat button on the right when there are messages.
+         * the rail is persistent on md+), brand text centered, and a
+         * New chat button on the right when there are messages.
          * Intentionally light — the rail carries the full chrome
          * (HISTORY label, collapse, conversation list, Clear all).
          */}
@@ -316,37 +316,50 @@ export function ChatContainer() {
             "bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/40"
           )}
         >
-          <Button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Open chat history"
-            className="md:hidden"
-          >
-            <Menu className="size-4" aria-hidden="true" />
-          </Button>
-          <span
-            aria-hidden="true"
-            className="hidden size-6 items-center justify-center rounded-md border border-foreground/10 bg-foreground/5 md:flex"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              className="size-3.5"
-              xmlns="http://www.w3.org/2000/svg"
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Open chat history"
+              className="md:hidden"
             >
-              <path
-                d="M3 13V3l10 10V3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+              <Menu className="size-4" aria-hidden="true" />
+            </Button>
+            <span
+              aria-hidden="true"
+              className="hidden size-6 items-center justify-center rounded-md border border-foreground/10 bg-foreground/5 md:flex"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                className="size-3.5"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M3 13V3l10 10V3"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </div>
+
+          {/*
+           * flex-1 makes the brand text fill the remaining horizontal
+           * space between the left cluster and the right button; text-center
+           * centers it within that space. pointer-events-none keeps the
+           * span out of the click path so it doesn't intercept clicks
+           * on the New chat button.
+           */}
+          <span className="pointer-events-none flex-1 text-center text-sm font-medium tracking-tight">
+            EU AI Act Expert
           </span>
-          <span className="text-sm font-medium tracking-tight">EU AI Act Expert</span>
-          <div className="ml-auto flex items-center gap-1">
+
+          <div className="flex items-center gap-1">
             {hasMessages ? (
               <Button
                 type="button"
