@@ -112,7 +112,12 @@ export function ChatHistory({
       aria-label="Chat history"
       data-collapsed={!isExpanded ? "true" : undefined}
       className={cn(
-        "flex h-full flex-col border-r border-border/40 bg-card/30",
+        // bg-background/95 (not bg-card/30) so the top bar's
+        // border-b doesn't bleed through. 95% lets the chat surface
+        // show a hint of context underneath when scrolled, but the
+        // top edge stays solid so the page header's bottom border
+        // doesn't ghost through the rail.
+        "flex h-full flex-col border-r border-border/40 bg-background/95",
         // Drawer mode: always full-width, mobile only.
         variant === "drawer" && "w-[300px] max-w-[85vw]",
         // Rail mode: the parent in ChatContainer controls the width
