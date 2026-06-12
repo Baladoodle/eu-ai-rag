@@ -294,10 +294,17 @@ export function ChatContainer() {
        * overlays the chat column rather than pushing it; the chat
        * column gets the full viewport width and centers its content
        * to the actual viewport center.
+       *
+       * `top: 49px` places the rail below the page header. The header
+       * is `flex items-center gap-2.5 border-b ... bg-background/60
+       * py-3` with a `size-6` icon — so its height is roughly:
+       *   12 (py-3 top) + 24 (icon) + 12 (py-3 bottom) + 1 (border) ≈ 49px.
+       * Hardcoding keeps the rail's z-stack simple (no header-vs-rail
+       * overlap) without introducing a ref to measure the header.
        */}
       <div
-        className="hidden md:block fixed inset-y-0 left-0 z-30 transition-[width] duration-200 ease-out"
-        style={{ width: `${sidebarWidth}px` }}
+        className="hidden md:block fixed left-0 z-30 transition-[width] duration-200 ease-out"
+        style={{ top: "49px", bottom: 0, width: `${sidebarWidth}px` }}
       >
         <ChatHistory
           conversations={history.conversations}
