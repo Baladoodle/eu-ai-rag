@@ -56,7 +56,7 @@ export async function getVectorStore(): Promise<VectorStore> {
         { backend: "pg" },
         "vector.factory.pgMissingConnectionString.fallbackToMemory",
       );
-      chosen = makeMemory();
+      chosen = await makeMemory();
     } else {
       try {
         const { PgVector } = await import("@mastra/pg");
@@ -71,11 +71,11 @@ export async function getVectorStore(): Promise<VectorStore> {
           { err: String(err) },
           "vector.factory.pgLoadFailed.fallbackToMemory",
         );
-        chosen = makeMemory();
+        chosen = await makeMemory();
       }
     }
   } else {
-    chosen = makeMemory();
+    chosen = await makeMemory();
   }
 
   cache.store = chosen;
@@ -84,17 +84,85 @@ export async function getVectorStore(): Promise<VectorStore> {
 
 /**
  * Build a fresh in-memory store, pre-seeded with the fixture corpus.
- * Why a function: lets us call it from both the factory path and the
- * test-only `resetVectorStoreForTesting()` path.
+ *
+ * Why async:
+ *   The fixture corpus is embedded at build time with the *local* hash
+ *   embedder (256 dims). If the live embedder is configured (e.g. a
+ *   Voyage key is set in `.env.local`), the query side will run at
+ *   that embedder's dimension (1024 for voyage-code-3). The two
+ *   vector spaces are then incommensurable: cosine similarity between
+ *   a 1024-dim query and a 256-dim stored vector is noise, every
+ *   retrieval returns 0 chunks, and the user sees an empty refusal.
+ *
+ *   We close the gap here: if the live embedder's dimension differs
+ *   from the fixture's, we re-embed the fixture texts once on startup
+ *   so the corpus and queries live in the same space. The cost is a
+ *   single batched embed call (10 short passages) and is amortized by
+ *   the module-level cache.
+ *
+ *   If the live call fails (no network, bad key, rate limit), we log
+ *   a warning and fall back to the local vectors. The dev path still
+ *   works end-to-end on the local embedder; the user just won't get
+ *   meaningful results until they either fix the key or unset it.
+ *
+ * Why a function (vs. inlining into `getVectorStore`):
+ *   Lets us call it from both the factory path and the test-only
+ *   `resetVectorStoreForTesting()` path.
  */
-function makeMemory(): VectorStore {
-  const inner = new InMemoryVectorStore(
-    buildFixtureCorpus().map((f) => ({
+async function makeMemory(): Promise<VectorStore> {
+  const fixtures = buildFixtureCorpus();
+  const localDim = fixtures[0]?.vector.length ?? 0;
+
+  // Decide which vectors to seed. Default to the local ones — if we
+  // can't reach the live embedder we still want the store usable.
+  let seedRows: ReadonlyArray<{ id: string; vector: number[]; metadata: Record<string, unknown> }> =
+    fixtures.map((f) => ({
       id: f.id,
       vector: f.vector,
       metadata: f.metadata as Record<string, unknown>,
-    })),
-  );
+    }));
+
+  try {
+    const { activeEmbeddingDimension, embed } = await import("@/lib/rag/embed") as unknown as {
+      activeEmbeddingDimension: () => number;
+      embed: (texts: string[]) => Promise<number[][]>;
+    };
+    const liveDim = activeEmbeddingDimension();
+    if (liveDim !== localDim) {
+      // Re-embed the fixture texts with the live provider so the
+      // corpus matches the query embedder's dimension.
+      const texts = fixtures.map((f) => String(f.metadata["text"] ?? ""));
+      const liveVectors = await embed(texts);
+      if (liveVectors.length === fixtures.length && liveVectors[0]?.length === liveDim) {
+        seedRows = fixtures.map((f, i) => ({
+          id: f.id,
+          vector: liveVectors[i] ?? f.vector,
+          metadata: f.metadata as Record<string, unknown>,
+        }));
+        log.info(
+          { from: localDim, to: liveDim, count: liveVectors.length },
+          "vector.factory.fixturesReembedded",
+        );
+      } else {
+        log.warn(
+          { expected: fixtures.length, got: liveVectors.length, liveDim },
+          "vector.factory.embedShapeMismatch.fallbackToLocal",
+        );
+      }
+    }
+  } catch (err) {
+    // Live embedder unreachable (no key, no network, bad key). The
+    // local vectors will still produce a working but semantically
+    // weak retrieval when the live embedder is also unreachable;
+    // when the live embedder *is* reachable this fallback means
+    // scores will look wrong, but the store won't be empty.
+    log.warn(
+      { err: String(err), localDim },
+      "vector.factory.liveEmbedFailed.fallbackToLocal",
+    );
+  }
+
+  const inner = new InMemoryVectorStore(seedRows);
   const adapter: VectorStore = {
     createIndex: (i, d) => inner.createIndex(i, d),
     upsert: (i, r) => inner.upsert(i, r),

@@ -84,6 +84,14 @@ export interface RetrievalResult {
     latencyMs: number;
     /** The embedding model used, e.g. "voyage-code-3". */
     embeddingModel: string;
+    /**
+     * True when this result was obtained via the broad-fallback pass
+     * (the strict pass returned zero and we re-queried at a lower
+     * threshold). The pipeline uses this to relax the
+     * empty-retrieval refusal threshold — borderline-but-non-zero
+     * retrieval is now a generation, not a refusal.
+     */
+    usedBroadFallback: boolean;
   };
   queryEmbedding: number[];
 }
@@ -95,12 +103,50 @@ export interface RetrievalResult {
 export type EmbedFn = (texts: string[]) => Promise<number[][]>;
 
 /**
+ * The fallback minimum score used when the first pass returns zero
+ * results. Lower than `DEFAULT_MIN_SCORE` because at that point we'd
+ * rather feed borderline-but-plausible context to the LLM and let the
+ * prompt's "cite only the sources block" rule discipline the answer
+ * than refuse outright.
+ *
+ * Why 0.2 and not 0:
+ *   A score of 0.0 admits pure noise (especially from the local hash
+ *   embedder, where unrelated texts cluster near 0). 0.2 is a safe
+ *   floor — too low to be noise, low enough to catch legitimately
+ *   related articles that don't strongly match the surface form of
+ *   the question.
+ */
+const DEFAULT_BROAD_MIN_SCORE = 0.2;
+
+/**
+ * A wider `topK` for the fallback pass. The first pass asks for the
+ * default 10; the fallback widens to 20 so a borderline question can
+ * still see related articles even if they're not in the top 10.
+ */
+const BROAD_TOP_K = 20;
+
+/**
  * Default options for `retrieve()`. Exported so tests can pass a partial
  * and rely on the rest.
+ *
+ * `broadMinScore` controls the fallback pass — when the first pass
+ * returns zero results we re-query with a lower threshold so a
+ * borderline question still gets *some* context for the LLM to draw
+ * on. Set to `null` to disable the fallback.
  */
 export interface RetrieveOptions {
   topK?: number;
   minScore?: number;
+  /**
+   * Minimum score for the second-pass "broad" query. Defaults to
+   * `DEFAULT_BROAD_MIN_SCORE` (0.2). Pass `null` to disable the
+   * fallback entirely.
+   */
+  broadMinScore?: number | null;
+  /**
+   * `topK` for the broad fallback pass. Defaults to `BROAD_TOP_K` (20).
+   */
+  broadTopK?: number;
   reader?: VectorReader;
   embed?: EmbedFn;
 }
@@ -140,6 +186,7 @@ export async function retrieve(
         topScore: 0,
         latencyMs: Date.now() - startedAt,
         embeddingModel: getEmbeddingModelId(),
+        usedBroadFallback: false,
       },
       queryEmbedding: [],
     };
@@ -155,7 +202,37 @@ export async function retrieve(
   const reader = options.reader ?? (await getVectorReader());
 
   // 3. Query the store. The reader handles normalization/similarity math.
-  const raw = await reader.query(queryEmbedding, { topK, minScore });
+  let raw = await reader.query(queryEmbedding, { topK, minScore });
+  let usedBroadFallback = false;
+
+  // 3a. Broader fallback. When the strict pass returns nothing, retry
+  // with a lower score floor and a wider topK. This rescues borderline
+  // questions where the closest article is legitimately relevant but
+  // not strongly above 0.5 cosine — without weakening the strict pass
+  // for high-confidence questions. The prompt's "cite only the
+  // sources block" rule still disciplines the LLM on whatever comes
+  // back; this just gives it *something* to work with.
+  if (raw.length === 0) {
+    const broadMinScore =
+      options.broadMinScore === null
+        ? null
+        : options.broadMinScore ?? DEFAULT_BROAD_MIN_SCORE;
+    if (broadMinScore !== null) {
+      const broadTopK = options.broadTopK ?? BROAD_TOP_K;
+      const broadRaw = await reader.query(queryEmbedding, {
+        topK: broadTopK,
+        minScore: broadMinScore,
+      });
+      if (broadRaw.length > 0) {
+        raw = broadRaw;
+        usedBroadFallback = true;
+        log.info(
+          { broadMinScore, broadTopK, topScore: broadRaw[0]?.score ?? 0 },
+          "retrieval.broad_fallback",
+        );
+      }
+    }
+  }
 
   // 4. Compute the result metadata.
   const topScore = raw[0]?.score ?? 0;
@@ -188,6 +265,7 @@ export async function retrieve(
       topScore,
       latencyMs,
       embeddingModel: getEmbeddingModelId(),
+      usedBroadFallback,
     },
     queryEmbedding,
   };

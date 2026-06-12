@@ -72,9 +72,21 @@ export function getApiKey(): string | undefined {
  * defaulting to undefined (the official API) and letting the SDK pick
  * its own base, we don't break the happy path. Setting the var to
  * an Anthropic-compatible URL is enough to route through a proxy.
+ *
+ * Why we normalize a trailing `/v1`:
+ *   The @ai-sdk/anthropic provider appends `/messages` to whatever
+ *   baseURL you give it, and its own default is
+ *   `https://api.anthropic.com/v1`. A bare `https://proxy.example`
+ *   in the env would produce `https://proxy.example/messages` — which
+ *   most Anthropic-compatible proxies (MiniMax, Bedrock gateway,
+ *   etc.) serve at `/v1/messages` instead, returning a 404. We append
+ *   `/v1` if the user-supplied URL doesn't already end with it, so
+ *   the proxied call lands on the right path.
  */
 export function getBaseUrl(): string | undefined {
-  return process.env.ANTHROPIC_BASE_URL;
+  const raw = process.env.ANTHROPIC_BASE_URL;
+  if (!raw) return undefined;
+  return /\/v1\/?$/.test(raw) ? raw : `${raw.replace(/\/+$/, "")}/v1`;
 }
 
 /**

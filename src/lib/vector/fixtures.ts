@@ -166,6 +166,62 @@ const FIXTURE_DOCS: ReadonlyArray<{
     section: "Maximum administrative fines",
     text: "Article 99 sets the maximum administrative fines for infringement of the AI Act. Member States must lay down the rules on penalties and notify the Commission by 2 August 2025, taking into account the nature, gravity, and duration of the infringement. The maximum fines are: (a) EUR 35 000 000 or 7% of total worldwide annual turnover, whichever is higher, for infringement of Article 5 (prohibited practices); (b) EUR 15 000 000 or 3% of total worldwide annual turnover, whichever is higher, for non-compliance with most other obligations and requirements; (c) EUR 7 500 000 or 1% of total worldwide annual turnover, whichever is higher, for supplying incorrect, incomplete, or misleading information to notified bodies or authorities. SMEs benefit from the lower of the two amounts in each case.",
   },
+  {
+    id: "ai-act/article-4#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/4/",
+    title: "Article 4 — Approaches to AI Risk",
+    section: "Risk taxonomy and proportionality",
+    text: "Article 4 sets out the Union's overall approach to AI risk and identifies four risk categories that the Act applies differentially: unacceptable risk (AI practices prohibited under Article 5), high risk (the requirements in Chapter III Section 2 apply), limited risk (the transparency obligations in Article 50 apply), and minimal or no risk (no additional legal obligations beyond existing law). The framework requires that, for each AI system, the risk level be considered in light of the system's intended purpose, the persons or groups affected, and the context of use. Providers and deployers are expected to apply a risk-based approach: the higher the potential impact on fundamental rights, health, or safety, the stricter the obligations. Article 4 is the umbrella provision that ties the specific obligations in Articles 5, 6, and 50 together into a single coherent framework.",
+  },
+  {
+    id: "ai-act/article-43#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/43/",
+    title: "Article 43 — Conformity Assessment",
+    section: "Procedures for high-risk AI systems",
+    text: "Article 43 sets out the conformity assessment procedures for high-risk AI systems. Providers must demonstrate that their high-risk AI system complies with the requirements in Chapter III Section 2 (Articles 8-15) before placing it on the market or putting it into service. Three procedures are available, depending on the system: (1) internal control (Annex VI) — the provider self-assesses and drafts the technical documentation, the quality management system, and the EU declaration of conformity; this is the default for most Annex III systems; (2) internal control with notified-body involvement in certain design and development stages (Annex VII), for biometric systems; and (3) examination by a notified body (Annex VII) for AI systems that are safety components of products covered by Union harmonisation legislation listed in Annex I. Certificates issued by notified bodies are valid for a maximum of five years and may be renewed.",
+  },
+  {
+    id: "ai-act/article-49#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/49/",
+    title: "Article 49 — Registration",
+    section: "EU database for high-risk AI systems",
+    text: "Article 49 requires providers of high-risk AI systems to register their systems in the EU database established by the Commission before placing them on the market or putting them into service. Registration must include the provider's identity, the system's description, its intended purpose, the categories of natural persons affected, and a copy of the user instructions and the EU declaration of conformity. Deployers of certain high-risk systems (in public administration, critical infrastructure, and law enforcement) must also register as deployers. The information in the database is publicly accessible, subject to exceptions for sensitive data. The Commission maintains the database in accordance with the technical specifications set out in Annex VIII.",
+  },
+  {
+    id: "ai-act/article-71#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/71/",
+    title: "Article 71 — Post-Market Monitoring by Providers",
+    section: "Ongoing obligation after placement on the market",
+    text: "Article 71 requires providers of high-risk AI systems to establish and document a post-market monitoring system that is proportionate to the nature of the system. The system must actively and systematically gather, record, and analyse relevant data on the performance of the system throughout its lifetime, including data on interactions with users and other persons, and data on the system's compliance with the requirements in Chapter III Section 2. The data must be used to assess the system's continued conformity, identify any risks to fundamental rights, health, or safety that emerge post-deployment, and inform any necessary corrective actions. Providers must update the post-market monitoring plan as part of the technical documentation and make it available to national competent authorities on request.",
+  },
+  {
+    id: "ai-act/article-72#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/72/",
+    title: "Article 72 — Reporting of Serious Incidents",
+    section: "Notification obligations to market surveillance authorities",
+    text: "Article 72 requires providers of high-risk AI systems to report any serious incident to the market surveillance authorities of the Member States where the incident occurred. A 'serious incident' is any incident that directly or indirectly leads to, or might lead to, the death of a person, serious damage to health, serious harm to fundamental rights, or serious damage to property or the environment. The initial report must be made no later than 15 days after the provider becomes aware of the incident (or, in the case of a serious threat, immediately). A final report with the root cause and any corrective actions must follow within one month. Providers must also report to the provider of the AI system (where they are deployers rather than providers) and cooperate with any investigation by the competent authorities.",
+  },
+  {
+    id: "ai-act/article-113#chunk-0",
+    url: "https://artificialintelligenceact.eu/article/113/",
+    title: "Article 113 — Entry into Force and Application",
+    section: "Phased application timeline",
+    text: "Article 113 sets out when the AI Act becomes applicable. The Regulation entered into force on 1 August 2024, twenty days after its publication in the Official Journal of the European Union. The provisions of the Act apply in stages: (a) 2 February 2025 — the prohibitions in Article 5 and the general principles in Article 4a apply; (b) 2 August 2025 — the bulk of the Act, including the high-risk system requirements, the transparency obligations, and the GPAI rules, apply; (c) 2 August 2026 — the rules for high-risk systems covered by Annex I (the product-safety legislation) apply; (d) 2 August 2027 — the rules for high-risk systems covered by Annex III that are embedded in regulated products apply for the first time. The Act applies directly in all Member States without requiring national transposition.",
+  },
+  {
+    id: "ai-act/recital-10#chunk-0",
+    url: "https://artificialintelligenceact.eu/recital/10/",
+    title: "Recital 10 — Relationship with the GDPR",
+    section: "Complementarity and lex specialis",
+    text: "Recital 10 explains the relationship between the AI Act and Regulation (EU) 2016/679 (the GDPR). The Act is intended to complement the GDPR, not replace it. Personal data processed by AI systems is subject to the GDPR and the Law Enforcement Directive, and the AI Act builds on top of those rules. Where the AI Act overlaps with the GDPR, the AI Act applies as lex specialis (more specific law) and prevails over the general rules of the GDPR for the specific aspects it covers. The supervisory authorities for the AI Act are the same national authorities designated under the GDPR (the data protection authorities), and the European Data Protection Board (EDPB) and the European AI Office cooperate on matters that fall under both regimes. The Recital is explicit that the AI Act does not change the lawful basis for processing personal data under the GDPR.",
+  },
+  {
+    id: "ai-act/annex-3#chunk-0",
+    url: "https://artificialintelligenceact.eu/annex/3/",
+    title: "Annex III — High-Risk AI Use Cases",
+    section: "List of high-risk categories under Article 6(2)",
+    text: "Annex III enumerates the categories of AI systems that are always considered high-risk under Article 6(2). They are grouped into eight areas: (1) biometric identification, categorisation, and emotion recognition; (2) management and operation of critical infrastructure (water, gas, electricity, traffic, digital infrastructure); (3) education and vocational training (admissions, assessment, proctoring); (4) employment, workers' management, and self-employment (recruitment, evaluation, termination); (5) access to and use of essential private and public services and benefits (credit scoring, insurance pricing, emergency services); (6) law enforcement (risk assessment, polygraphs, evidence reliability evaluation); (7) migration, asylum, and border control management (risk assessment, examination of applications, identification); and (8) administration of justice and democratic processes (judicial decision support, voting advice, voter targeting). The Commission is required to review and update this list at least once a year.",
+  },
 ];
 
 /**

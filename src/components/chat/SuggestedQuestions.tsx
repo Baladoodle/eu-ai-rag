@@ -44,7 +44,7 @@ interface SuggestedQuestionsProps {
  * most common first-time user questions.
  */
 export const SUGGESTED_QUESTIONS: SuggestedQuestion[] = [
-  { id: "risk-levels", text: "What are the four risk levels for AI systems?" },
+  { id: "risk-levels", text: "What are the four risk categories used by the EU AI Act?" },
   { id: "prohibited", text: "Which AI practices are prohibited under Article 5?" },
   { id: "provider-obligations", text: "What obligations apply to providers of high-risk AI?" },
   { id: "gpai", text: "What rules apply to general-purpose AI (GPAI) models?" },

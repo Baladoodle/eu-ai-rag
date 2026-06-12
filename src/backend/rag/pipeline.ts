@@ -147,19 +147,38 @@ export async function runRagPipeline(
     retrieval.chunks.length === 0 ||
     retrieval.metadata.topScore < (localMode ? LOCAL_EMPTY_RETRIEVAL_THRESHOLD : EMPTY_RETRIEVAL_THRESHOLD)
   ) {
-    log.warn(
-      {
-        chunkCount: retrieval.chunks.length,
-        topScore: retrieval.metadata.topScore,
-      },
-      "pipeline.empty_retrieval",
-    );
+    // Broad-fallback rescue: if the retrieval layer already widened
+    // its score floor and we still got nothing (or a result below the
+    // empty threshold), refusing is the right call. But if the
+    // broad-fallback path *did* return a non-empty result with a
+    // positive score, that means a borderline-but-relevant article
+    // came back — the strict threshold here would wrongly drop it.
+    // We lower the bar for that case to one tied to the broad
+    // fallback's score floor (0.2 in production).
+    if (retrieval.metadata.usedBroadFallback && retrieval.chunks.length > 0) {
+      // Proceed to generation with the broad-fallback corpus.
+      log.info(
+        {
+          chunkCount: retrieval.chunks.length,
+          topScore: retrieval.metadata.topScore,
+        },
+        "pipeline.broad_fallback_proceed",
+      );
+    } else {
+      log.warn(
+        {
+          chunkCount: retrieval.chunks.length,
+          topScore: retrieval.metadata.topScore,
+        },
+        "pipeline.empty_retrieval",
+      );
 
-    return buildRefusalStream({
-      retrieval,
-      reason:
-        retrieval.chunks.length === 0 ? "no_chunks" : "low_confidence",
-    });
+      return buildRefusalStream({
+        retrieval,
+        reason:
+          retrieval.chunks.length === 0 ? "no_chunks" : "low_confidence",
+      });
+    }
   }
 
   // --- Step 3: Build the prompt ---
@@ -289,7 +308,7 @@ function buildRefusalStream(params: {
 }): PipelineOutput {
   const refusalText =
     params.reason === "no_chunks"
-      ? "I couldn't find that in the Mastra docs. Could you rephrase the question?"
+      ? "I couldn't find anything on that in the EU AI Act sources I have. Could you rephrase the question, or mention the article or topic by name?"
       : "I found some sources but none of them confidently answer your question. Could you rephrase or add more detail?";
 
   // We synthesize a `UIMessageStream` from a single text-delta chunk.
