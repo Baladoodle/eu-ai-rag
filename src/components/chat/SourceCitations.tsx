@@ -170,12 +170,17 @@ export function CitationChip({ index, onSelect, kind, title, dimmed = false }: C
       animate={{ opacity: dimmed ? 0.4 : 1 }}
       transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "inline-flex h-[18px] min-w-[18px] cursor-pointer items-center justify-center rounded-md border border-border/60 bg-muted/50 px-1 align-baseline",
-        "font-mono text-[10px] font-medium text-muted-foreground tabular-nums leading-none",
+        // True inline element so the chip sits on the text baseline and
+        // never forces a line break. We use `align-super` + `text-[0.7em]`
+        // so the chip looks like a superscript footnote marker — small,
+        // tight, and part of the line — rather than a 18px button that
+        // would push the line box tall enough to wrap.
+        "mx-0.5 inline cursor-pointer rounded border border-border/60 bg-muted/50 align-super",
+        "font-mono text-[0.7em] font-medium text-muted-foreground tabular-nums leading-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       )}
     >
-      {index}
+      <span className="px-1 py-px">{index}</span>
     </motion.button>
   );
 }

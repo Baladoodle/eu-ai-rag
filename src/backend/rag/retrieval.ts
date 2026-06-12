@@ -44,11 +44,17 @@ import {
 } from "@/lib/vector-store-reader";
 
 /**
- * How many chunks to ask the vector store for. We over-fetch (10) so the
- * optional re-ranker has room to swap in better candidates. The prompt
- * builder will truncate to a final number (e.g. 5) anyway.
+ * How many chunks to ask the vector store for. The final result is
+ * capped at 5 because the model only ever cites 2-5 sources in
+ * practice, and shipping 10 chunks to the prompt just adds noise and
+ * makes the model more likely to default to `[1]` on every claim
+ * (rather than picking the right `[n]` for each).
+ *
+ * The broad-fallback pass uses a wider window (see `BROAD_TOP_K`)
+ * because there we *want* to surface marginally-related articles;
+ * the strict pass can be tighter.
  */
-const DEFAULT_TOP_K = 10;
+const DEFAULT_TOP_K = 5;
 
 /**
  * Below this cosine similarity we treat the chunk as noise and drop it.
@@ -224,10 +230,14 @@ export async function retrieve(
         minScore: broadMinScore,
       });
       if (broadRaw.length > 0) {
-        raw = broadRaw;
+        // The broad pass fetches a wider window so the vector store
+        // has room to surface marginally-related articles. We still
+        // cap the *result* at the strict `topK` so the prompt never
+        // sees more than 5 sources.
+        raw = broadRaw.slice(0, topK);
         usedBroadFallback = true;
         log.info(
-          { broadMinScore, broadTopK, topScore: broadRaw[0]?.score ?? 0 },
+          { broadMinScore, broadTopK, kept: raw.length, topScore: raw[0]?.score ?? 0 },
           "retrieval.broad_fallback",
         );
       }
