@@ -327,25 +327,6 @@ export function ChatContainer() {
             >
               <Menu className="size-4" aria-hidden="true" />
             </Button>
-            <span
-              aria-hidden="true"
-              className="hidden size-6 items-center justify-center rounded-md border border-foreground/10 bg-foreground/5 md:flex"
-            >
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                className="size-3.5"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M3 13V3l10 10V3"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
           </div>
 
           {/*
