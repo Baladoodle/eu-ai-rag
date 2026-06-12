@@ -268,18 +268,6 @@ export function ChatContainer() {
     reset();
   }, [history, reset]);
 
-  const handleReset = React.useCallback(() => {
-    log.info({ messageCount: messages.length }, "chat.reset");
-    // Start a fresh chat, just like the sidebar's New chat button.
-    // The previous version only cleared messages, which left the
-    // surface on the same id and confused the user (clicking the
-    // header's "New chat" didn't feel like a new chat).
-    const id = createLocalId();
-    setActiveChatId(id);
-    history.setActiveId(id);
-    reset();
-  }, [history, reset, messages.length]);
-
   // Sidebar width is conditional on collapsed state. We pin the
   // sidebar to position: fixed (below) so the chat column takes the
   // full viewport width and the centered content (max-w-2xl mx-auto)
@@ -293,18 +281,13 @@ export function ChatContainer() {
        * Persistent history rail (md+). Fixed-positioned so it
        * overlays the chat column rather than pushing it; the chat
        * column gets the full viewport width and centers its content
-       * to the actual viewport center.
-       *
-       * `top: 49px` places the rail below the page header. The header
-       * is `flex items-center gap-2.5 border-b ... bg-background/60
-       * py-3` with a `size-6` icon — so its height is roughly:
-       *   12 (py-3 top) + 24 (icon) + 12 (py-3 bottom) + 1 (border) ≈ 49px.
-       * Hardcoding keeps the rail's z-stack simple (no header-vs-rail
-       * overlap) without introducing a ref to measure the header.
+       * to the actual viewport center. The rail carries the brand
+       * ("EU AI Act Expert") in its own header — no page-level
+       * header needed.
        */}
       <div
-        className="hidden md:block fixed left-0 z-30 transition-[width] duration-200 ease-out"
-        style={{ top: "49px", bottom: 0, width: `${sidebarWidth}px` }}
+        className="hidden md:block fixed inset-y-0 left-0 z-30 transition-[width] duration-200 ease-out"
+        style={{ width: `${sidebarWidth}px` }}
       >
         <ChatHistory
           conversations={history.conversations}
@@ -320,10 +303,63 @@ export function ChatContainer() {
       </div>
 
       <div className="flex h-full w-full min-w-0 flex-col">
-        <Header
-          onReset={hasMessages ? handleReset : undefined}
-          onOpenDrawer={() => setDrawerOpen(true)}
-        />
+        {/*
+         * Minimal top bar: hamburger on the left (mobile only, since
+         * the rail is persistent on md+), brand text in the middle, and
+         * a New chat button on the right when there are messages.
+         * Intentionally light — the rail carries the full chrome
+         * (HISTORY label, collapse, conversation list, Clear all).
+         */}
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-2",
+            "bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/40"
+          )}
+        >
+          <Button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Open chat history"
+            className="md:hidden"
+          >
+            <Menu className="size-4" aria-hidden="true" />
+          </Button>
+          <span
+            aria-hidden="true"
+            className="hidden size-6 items-center justify-center rounded-md border border-foreground/10 bg-foreground/5 md:flex"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              className="size-3.5"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M3 13V3l10 10V3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span className="text-sm font-medium tracking-tight">EU AI Act Expert</span>
+          <div className="ml-auto flex items-center gap-1">
+            {hasMessages ? (
+              <Button
+                type="button"
+                onClick={handleNewChat}
+                variant="ghost"
+                size="sm"
+                aria-label="Start a new conversation"
+              >
+                New chat
+              </Button>
+            ) : null}
+          </div>
+        </div>
 
         <main className="relative flex flex-1 flex-col overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
@@ -441,71 +477,6 @@ export function ChatContainer() {
 // ----------------------------------------------------------------------------
 // Subcomponents
 // ----------------------------------------------------------------------------
-
-interface HeaderProps {
-  onReset?: () => void;
-  onOpenDrawer: () => void;
-}
-
-function Header({ onReset, onOpenDrawer }: HeaderProps) {
-  return (
-    <header
-      className={cn(
-        "flex shrink-0 items-center justify-between border-b border-border/40 bg-background/60 px-4 py-3",
-        "backdrop-blur supports-[backdrop-filter]:bg-background/40"
-      )}
-    >
-      <div className="flex items-center gap-2.5">
-        {/*
-         * Hamburger — visible only on narrow viewports. The history
-         * rail is a sibling on md+ so the button is hidden there.
-         */}
-        <Button
-          type="button"
-          onClick={onOpenDrawer}
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Open chat history"
-          className="md:hidden"
-        >
-          <Menu className="size-4" aria-hidden="true" />
-        </Button>
-        <span
-          aria-hidden="true"
-          className="flex size-6 items-center justify-center rounded-md border border-foreground/10 bg-foreground/5"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            className="size-3.5"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M3 13V3l10 10V3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-        <span className="text-sm font-medium tracking-tight">EU AI Act Expert</span>
-      </div>
-
-      {onReset ? (
-        <Button
-          type="button"
-          onClick={onReset}
-          variant="ghost"
-          size="sm"
-          aria-label="Start a new conversation"
-        >
-          New chat
-        </Button>
-      ) : null}
-    </header>
-  );
-}
 
 interface ErrorBannerProps {
   code: string;
