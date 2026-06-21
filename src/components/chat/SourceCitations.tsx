@@ -72,6 +72,20 @@ const ANNEX_RE = /annex\s+([ivxlcdm]+|\d+)/i;
 const COMMISSION_RE = /commission|guidance|implementing\s+act|delegated\s+act/i;
 
 export function parseCitation(citation: Citation): ParsedCitation {
+  // Prefer the wire-pinned article number when the chunk metadata carries
+  // it (set at ingestion time by scrapers/docs.ts). This removes the
+  // load-bearing coincidence that the regex below used to match inside
+  // `citation.source.id` — change the id format and the card would
+  // silently degrade to `kind: "other"` without this pin.
+  const pinnedArticleNumber = citation.source.articleNumber;
+  if (pinnedArticleNumber) {
+    return {
+      kind: "article",
+      number: pinnedArticleNumber,
+      label: `Article ${pinnedArticleNumber}`,
+      typeLabel: "Article",
+    };
+  }
   const haystack = `${citation.source.title} ${citation.source.section ?? ""} ${citation.source.id}`;
   const article = haystack.match(ARTICLE_RE);
   if (article?.[1]) {
@@ -186,32 +200,35 @@ export function CitationChip({ index, onSelect, kind, title, dimmed = false }: C
 }
 
 // ----------------------------------------------------------------------------
-// CitationChips — the summary row at the bottom of the message.
-// ----------------------------------------------------------------------------
-
 interface CitationChipsProps {
-  /** 1-based index of the highest citation in this message. */
-  count: number;
+  /**
+   * The citations the model actually used. Why pass citations instead
+   * of just a count: the displayed source cards can be sparse
+   * (filtered to only the indices the model cited with `[N]`). The
+   * chip strip should mirror that sparsity — rendering chip `2`
+   * when no card `2` exists makes the click silently no-op.
+   */
+  citations: ReadonlyArray<Citation>;
   /** Called with the 1-based index when a chip is clicked. */
   onSelect?: (index: number) => void;
   /** Kinds per index (1-based), used to colour each chip. */
   kinds?: Record<number, CitationKind>;
 }
 
-export function CitationChips({ count, onSelect, kinds }: CitationChipsProps) {
-  if (count <= 0) return null;
+export function CitationChips({ citations, onSelect, kinds }: CitationChipsProps) {
+  if (citations.length === 0) return null;
 
   return (
     <span
       role="list"
-      aria-label={`${count} citation${count === 1 ? "" : "s"}`}
+      aria-label={`${citations.length} citation${citations.length === 1 ? "" : "s"}`}
       className="ml-1 inline-flex items-center gap-1 align-baseline"
     >
-      {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
+      {citations.map((c) => (
         <CitationChip
-          key={n}
-          index={n}
-          kind={kinds?.[n] ?? "other"}
+          key={c.index}
+          index={c.index}
+          kind={kinds?.[c.index] ?? "other"}
           onSelect={onSelect}
         />
       ))}
@@ -240,11 +257,10 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
   const eur = eurLexHref(citation);
   const accent = accentForKind(parsed.kind);
 
-  // Clamp score to [0, 1] for the relevance bar width. If the score is
-  // missing or out-of-range we still render the bar at full width as a
-  // neutral default — never < 0%, never wider than the card.
-  const scorePct = Math.max(0, Math.min(1, citation.source.score ?? 0)) * 100;
-  const scoreLabel = `${(citation.source.score * 100).toFixed(0)}%`;
+  // The retrieval-confidence score was intentionally removed from the
+  // wire shape (see `Source` in api-contract.ts). End users conflated
+  // cosine similarity with answer correctness. The card now shows only
+  // the article/recital/annex label and the EUR-Lex link.
 
   // Why compact by default, expand on click:
   //   A 10-source answer can produce 10 nearly-identical cards. With
@@ -370,12 +386,6 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
           </span>
         ) : null}
 
-        <span
-          aria-hidden="true"
-          className="ml-auto inline-flex items-center gap-1.5 pl-2 text-[10px] font-mono tabular-nums text-muted-foreground/80"
-        >
-          {scoreLabel}
-        </span>
 
         <motion.span
           aria-hidden="true"
@@ -408,51 +418,28 @@ function SourceCard({ citation, index, active, hovered = false, onHoverChange }:
                 {citation.source.snippet}
               </p>
 
-              <div className="flex items-center gap-3">
-                <motion.a
-                  href={eur}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
-                  onClick={(event) => event.stopPropagation()}
-                  whileHover={{
-                    backgroundColor:
-                      "color-mix(in oklch, var(--muted) 40%, transparent)",
-                    color: "var(--foreground)",
-                  }}
-                  whileFocus={{
-                    backgroundColor:
-                      "color-mix(in oklch, var(--muted) 40%, transparent)",
-                    color: "var(--foreground)",
-                  }}
-                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                  className="inline-flex items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  EUR-Lex
-                  <ExternalLink className="size-2.5" aria-hidden="true" />
-                </motion.a>
-
-                {/*
-                 * Relevance bar: only when expanded, so the compact
-                 * row stays uncluttered. Same colour = type accent, same
-                 * width = the score, so the visual language is
-                 * consistent.
-                 */}
-                <span
-                  aria-hidden="true"
-                  className="ml-auto inline-flex items-center gap-2"
-                >
-                  <span className="block h-[2px] w-24 overflow-hidden rounded-full bg-border/40">
-                    <motion.span
-                      initial={false}
-                      animate={{ width: `${scorePct}%` }}
-                      transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
-                      style={{ backgroundColor: accent }}
-                      className="block h-full rounded-full"
-                    />
-                  </span>
-                </span>
-              </div>
+              <motion.a
+                href={eur}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${parsed.label} on EUR-Lex (canonical)`}
+                onClick={(event) => event.stopPropagation()}
+                whileHover={{
+                  backgroundColor:
+                    "color-mix(in oklch, var(--muted) 40%, transparent)",
+                  color: "var(--foreground)",
+                }}
+                whileFocus={{
+                  backgroundColor:
+                    "color-mix(in oklch, var(--muted) 40%, transparent)",
+                  color: "var(--foreground)",
+                }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                className="inline-flex w-fit items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                EUR-Lex
+                <ExternalLink className="size-2.5" aria-hidden="true" />
+              </motion.a>
             </div>
           </motion.div>
         ) : null}

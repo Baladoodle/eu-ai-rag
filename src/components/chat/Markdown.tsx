@@ -50,7 +50,7 @@
 import * as React from "react";
 import { Streamdown } from "streamdown";
 
-import { CitationChip, type CitationKind } from "@/components/chat/SourceCitations";
+import { type CitationKind } from "@/components/chat/SourceCitations";
 import { cn } from "@/lib/utils";
 
 interface MarkdownProps {
@@ -104,78 +104,107 @@ export function Markdown({
     () => (dimmedIndices ? new Set(dimmedIndices) : null),
     [dimmedIndices],
   );
-
   // Walk the rendered DOM and replace `[N]` text nodes with
-  // CitationChip buttons. Runs in useLayoutEffect so the chips are
-  // present before paint, and the marker attribute guards against
-  // re-processing on every re-render.
-  React.useLayoutEffect(() => {
+  // CitationChip buttons.
+  //
+  // Why MutationObserver instead of useLayoutEffect with deps:
+  //   Streamdown is a streaming-aware renderer. During a chat
+  // response it appends new text to the same DOM nodes it already
+  // rendered — React doesn't commit again for each appended chunk
+  // (Streamdown's own internal observer handles the DOM update), so
+  // a useLayoutEffect keyed on `children` only runs once or twice
+  // per response. New `[N]` tokens arriving in appended text are
+  // missed because the effect never re-runs after Streamdown
+  // mutates the DOM in place.
+  //
+  // A MutationObserver watches the container for child/text changes
+  // and re-runs the walker on each microtask the DOM changes. This
+  // is decoupled from React's render cycle and reliably catches
+  // every streaming chunk.
+  React.useEffect(() => {
     const root = containerRef.current;
     if (!root) return;
 
-    const textNodes: Text[] = [];
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode() as Text | null;
-    while (node) {
-      if (
-        node.parentElement?.getAttribute(PROCESSED_ATTR) === "true" ||
-        // Don't touch nodes inside our already-injected chips.
-        node.parentElement?.closest(`[data-citation-chip="true"]`)
-      ) {
-        node = walker.nextNode() as Text | null;
-        continue;
-      }
-      if (CITATION_TOKEN_RE.test(node.nodeValue ?? "")) {
-        textNodes.push(node);
-        // Reset lastIndex defensively — /g regexes are stateful.
-        CITATION_TOKEN_RE.lastIndex = 0;
-      }
-      node = walker.nextNode() as Text | null;
-    }
-
-    for (const textNode of textNodes) {
-      const value = textNode.nodeValue ?? "";
-      const fragment = document.createDocumentFragment();
-      let cursor = 0;
-      let match: RegExpExecArray | null;
-      // Fresh regex for each text node to avoid shared lastIndex bugs.
-      const re = /\[(\d+)\]/g;
-      while ((match = re.exec(value)) !== null) {
-        const start = match.index;
-        const end = start + match[0].length;
-        const prev = start > 0 ? value[start - 1] : "";
-        const next = end < value.length ? value[end] : "";
-
-        // Skip images: `![label](href)`.
-        if (prev === "!") continue;
-        // Skip links: `[label](href)`.
-        if (next === "(") continue;
-
-        if (start > cursor) {
-          fragment.appendChild(
-            document.createTextNode(value.slice(cursor, start)),
-          );
+    const processAllTextNodes = () => {
+      const textNodes: Text[] = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode() as Text | null;
+      while (node) {
+        const parent = node.parentElement;
+        const isProcessed = parent?.getAttribute(PROCESSED_ATTR) === "true";
+        const inChip = !!parent?.closest(`[data-citation-chip="true"]`);
+        if (!isProcessed && !inChip) {
+          const value = node.nodeValue ?? "";
+          // Always reset lastIndex BEFORE each test — /g regex is
+          // stateful and a previous match would otherwise leak
+          // lastIndex into the next test, causing it to skip past
+          // `[N]` tokens.
+          CITATION_TOKEN_RE.lastIndex = 0;
+          if (CITATION_TOKEN_RE.test(value)) {
+            textNodes.push(node);
+          }
         }
-        const index = Number.parseInt(match[1] ?? "0", 10);
-        const chip = makeChipElement({
-          index,
-          kind: citationKinds?.[index] ?? "other",
-          title: citationTitles?.[index],
-          dimmed: dimmedSet?.has(index) ?? false,
-          onSelect: onCitationSelect,
-        });
-        fragment.appendChild(chip);
-        cursor = end;
+        node = walker.nextNode() as Text | null;
       }
-      if (cursor < value.length) {
-        fragment.appendChild(document.createTextNode(value.slice(cursor)));
+
+      for (const textNode of textNodes) {
+        const value = textNode.nodeValue ?? "";
+        const fragment = document.createDocumentFragment();
+        let cursor = 0;
+        let match: RegExpExecArray | null;
+        // Fresh regex for each text node to avoid shared lastIndex bugs.
+        const re = /\[(\d+)\]/g;
+        while ((match = re.exec(value)) !== null) {
+          const start = match.index;
+          const end = start + match[0].length;
+          const prev = start > 0 ? value[start - 1] : "";
+          const next = end < value.length ? value[end] : "";
+
+          // Skip images: `![label](href)`.
+          if (prev === "!") continue;
+          // Skip links: `[label](href)`.
+          if (next === "(") continue;
+
+          if (start > cursor) {
+            fragment.appendChild(
+              document.createTextNode(value.slice(cursor, start)),
+            );
+          }
+          const index = Number.parseInt(match[1] ?? "0", 10);
+          const chip = makeChipElement({
+            index,
+            kind: citationKinds?.[index] ?? "other",
+            title: citationTitles?.[index],
+            dimmed: dimmedSet?.has(index) ?? false,
+            onSelect: onCitationSelect,
+          });
+          fragment.appendChild(chip);
+          cursor = end;
+        }
+        if (cursor < value.length) {
+          fragment.appendChild(document.createTextNode(value.slice(cursor)));
+        }
+        if (fragment.childNodes.length > 0) {
+          textNode.parentNode?.replaceChild(fragment, textNode);
+        }
       }
-      // Only replace if we actually found a citation to swap.
-      if (fragment.childNodes.length > 0) {
-        textNode.parentNode?.replaceChild(fragment, textNode);
-      }
-    }
-  }, [children, citationKinds, citationTitles, dimmedSet, onCitationSelect]);
+    };
+
+    // Run once on mount to catch any `[N]` already in the DOM.
+    processAllTextNodes();
+
+    // Then watch for DOM changes — Streamdown appends streamed
+    // text to existing nodes without going through React, so we
+    // need a DOM-level observer to catch each new chunk.
+    const observer = new MutationObserver(() => {
+      // Defer to a microtask so Streamdown's diff has settled
+      // before we re-walk.
+      queueMicrotask(processAllTextNodes);
+    });
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+
+    return () => observer.disconnect();
+  }, [citationKinds, citationTitles, dimmedSet, onCitationSelect]);
 
   if (!children) return null;
 

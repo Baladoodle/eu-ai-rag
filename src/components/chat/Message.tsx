@@ -35,6 +35,8 @@ import * as React from "react";
 
 import { LoadingIndicator } from "@/components/chat/LoadingIndicator";
 import { Markdown } from "@/components/chat/Markdown";
+import { ReferenceList } from "@/components/chat/ReferenceList";
+import { extractMentions, filterToUncited } from "@/components/chat/references";
 import {
   CitationChips,
   SourceList,
@@ -43,7 +45,6 @@ import {
 } from "@/components/chat/SourceCitations";
 import { messageVariants } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-
 import type { Citation } from "@/../api-contract";
 
 interface MessageProps {
@@ -115,13 +116,59 @@ export function Message({ message, isStreaming = false, className }: MessageProp
   }, [citations]);
 
   // Indices of chips that should render dimmed. We dim every chip
-  // except the one being hovered so the link between the card and the
-  // body is unambiguous.
+  // except the one being hovered so the link between the card and
+  // the body is unambiguous.
   const dimmedIndices = React.useMemo<number[] | undefined>(() => {
     if (hoveredCitation == null) return undefined;
     return citations.map((c) => c.index).filter((i) => i !== hoveredCitation);
   }, [hoveredCitation, citations]);
 
+  // Filter the source panel to only the citations the model actually
+  // cited. While streaming, the panel shows nothing (citations aren't
+  // known until the stream ends). After the stream, we intersect
+  // `citations` with the `[N]` indices in `text` and render only
+  // those — typically 1-3 instead of the full retrieval set.
+  //
+  // Why a separate variable: `citations` is still needed for chip
+  // rendering (every citation in the source block may be referenced
+  // by an inline `[N]`, even ones the source panel hides if the user
+  const displayedCitations = React.useMemo(() => {
+    const cited = extractCitedIndices(text);
+    // While the stream is in flight, we don't know which citations
+    // the model will end up using — show the full retrieval set so
+    // the user sees context as it lands. After the stream ends, if
+    // the model produced no `[N]` markers, we still want to show the
+    // full set rather than collapse to nothing — an empty source
+    // panel is more confusing than a redundant one.
+    if (isStreaming) return citations;
+    if (cited.size === 0) return citations;
+    return citations.filter((c) => cited.has(c.index));
+  }, [text, citations, isStreaming]);
+  // Detect Article / Recital / Annex mentions in the answer text.
+  // These become the "References" section — articles the assistant
+  // named but didn't directly cite. The user can click through to
+  // them, distinguishing them from "Sources" (which the assistant
+  // cited as evidence with a `[N]` marker).
+  //
+  // We hide References while streaming (the answer isn't done, so
+  // scanning for mentions gives an incomplete picture).
+  const references = React.useMemo(() => {
+    if (isStreaming) return [];
+    const mentions = extractMentions(text);
+    // Build dedup keys from the parsed citation kind+number (not from
+    // URLs). URLs come from the ingestion pipeline which may emit a
+    // different host than the corpus metadata — comparing URLs misses
+    // every dedup case. parseCitation already canonicalizes Article /
+    // Recital / Annex into kind+number.
+    const citedKeys = new Set<string>();
+    for (const c of displayedCitations) {
+      const parsed = parseCitation(c);
+      // Capitalize the first letter to match Reference["kind"] casing.
+      const kindCap = (parsed.kind.charAt(0).toUpperCase() + parsed.kind.slice(1)) as "Article" | "Recital" | "Annex";
+      if (parsed.number) citedKeys.add(`${kindCap}:${parsed.number}`);
+    }
+    return filterToUncited(mentions, citedKeys);
+  }, [text, displayedCitations, isStreaming]);
   return (
     <motion.article
       role="article"
@@ -140,7 +187,7 @@ export function Message({ message, isStreaming = false, className }: MessageProp
       <div
         className={cn(
           "flex min-w-0 max-w-[85%] flex-col gap-1 sm:max-w-[75%]",
-          isUser ? "items-end" : "items-start"
+          isUser ? "items-end" : "items-start",
         )}
       >
         <div
@@ -165,19 +212,22 @@ export function Message({ message, isStreaming = false, className }: MessageProp
           )}
         </div>
 
-        {!isUser && citations.length > 0 ? (
+        {!isUser && displayedCitations.length > 0 ? (
           <div className="w-full">
             <CitationChips
-              count={citations.length}
+              citations={displayedCitations}
               kinds={citationKinds}
               onSelect={handleCitationSelect}
             />
             <SourceList
-              citations={citations}
+              citations={displayedCitations}
               activeIndex={activeCitation}
               hoveredIndex={hoveredCitation}
               onHoverIndexChange={setHoveredCitation}
             />
+            {references.length > 0 ? (
+              <ReferenceList references={references} />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -306,6 +356,21 @@ interface ExtractedMessage {
  *
  * We don't render every part type — `step-start`, `source-url`, etc. are
  * irrelevant for the v1 RAG chat. We just defensively skip unknown parts.
+ *
+ * Why we filter citations to those actually cited in `text`:
+ *   The retrieval layer returns up to 12 chunks, but the model
+ * typically cites only 1-3 of them in any given answer. Showing the
+ * full list in the source panel pads the UI with cards that the
+ * answer never references — the user scrolls past them, scans them,
+ * and they don't help. Filtering to only the `[N]` indices that
+ * appear in `text` keeps the panel aligned with the prose.
+ *
+ * Why we keep all citations during streaming (not just after the
+ * stream ends): the chip-rendering pipeline needs every citation's
+ * `kind` and `title` to build its inline tooltip, even for citations
+ * the model will only cite at the end of the response. So we filter
+ * to a `displayedCitations` list at render time, separate from the
+ * raw `citations` map used for chip rendering.
  */
 function extractMessageData(message: UIMessage): ExtractedMessage {
   const textParts: string[] = [];
@@ -323,4 +388,18 @@ function extractMessageData(message: UIMessage): ExtractedMessage {
   }
 
   return { text: textParts.join(""), citations };
+}
+
+/**
+ * Find the citation indices (1-based) that appear as `[N]` markers in
+ * `text`. Used to filter the source panel down to only the sources
+ * the assistant actually cited.
+ */
+function extractCitedIndices(text: string): Set<number> {
+  const out = new Set<number>();
+  for (const m of text.matchAll(/\[(\d+)\]/g)) {
+    const n = Number.parseInt(m[1] ?? "", 10);
+    if (Number.isFinite(n) && n > 0) out.add(n);
+  }
+  return out;
 }

@@ -32,7 +32,7 @@ function makeCitation(overrides: Partial<Citation> = {}): Citation {
       url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689",
       snippet: "Classification rules for high-risk AI systems.",
       fullText: "Classification rules for high-risk AI systems.",
-      score: 0.92,
+
       retrievedAt: new Date().toISOString(),
       ...(overrides.source ?? {}),
     },
@@ -57,7 +57,7 @@ describe("parseCitation", () => {
         url: "",
         snippet: "Recital snippet",
         fullText: "Recital snippet",
-        score: 0.7,
+
         retrievedAt: new Date().toISOString(),
       } as never,
     });
@@ -74,7 +74,7 @@ describe("parseCitation", () => {
         url: "",
         snippet: "Annex content",
         fullText: "Annex content",
-        score: 0.5,
+
         retrievedAt: new Date().toISOString(),
       } as never,
     });
@@ -91,7 +91,7 @@ describe("parseCitation", () => {
         url: "",
         snippet: "Guidance text",
         fullText: "Guidance text",
-        score: 0.4,
+
         retrievedAt: new Date().toISOString(),
       } as never,
     });
@@ -108,7 +108,7 @@ describe("parseCitation", () => {
         url: "",
         snippet: "?",
         fullText: "?",
-        score: 0.2,
+
         retrievedAt: new Date().toISOString(),
       } as never,
     });

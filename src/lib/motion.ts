@@ -87,6 +87,25 @@ export const citationPanelVariants: Variants = {
 };
 
 /**
+ * References panel (smaller, chip-style — does NOT need height
+ * collapse on exit because it's so small that AnimatePresence handles
+ * it via opacity alone).
+ */
+export const referencePanelVariants: Variants = {
+  hidden: { opacity: 0, y: 2 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: duration.base, ease: easeOut, delay: 0.05 },
+  },
+  exit: {
+    opacity: 0,
+    y: 2,
+    transition: { duration: duration.fast, ease: easeOut },
+  },
+};
+
+/**
  * Suggested-question chip. Subtle scale-up + fade. Each child is staggered
  * by the parent list variant.
  */
@@ -96,18 +115,6 @@ export const chipVariants: Variants = {
     opacity: 1,
     y: 0,
     transition: { duration: duration.base, ease: easeOut },
-  },
-};
-
-/**
- * Loader dot. Each dot uses this; the parent applies the per-dot delay.
- */
-export const dotVariants: Variants = {
-  start: { opacity: 0.3, y: 0 },
-  pulse: {
-    opacity: 1,
-    y: -2,
-    transition: { duration: 0.6, ease: easeOut, repeat: Infinity, repeatType: "reverse" },
   },
 };
 
