@@ -105,6 +105,48 @@ export async function fetchText(url: string): Promise<string> {
 }
 
 /**
+ * Wayback Machine snapshot URL builder. When the live mirror of a page
+ * is unreachable (typically: misconfigured server-side redirects on
+ * artificialintelligenceact.eu that loop forever), we fall back to an
+ * archived snapshot. The `id_` flag tells Wayback to serve raw bytes
+ * without injecting its toolbar/analytics script wrappers — keeps the
+ * HTML clean for downstream Readability/turndown parsing.
+ *
+ * Why 2024: the EU AI Act was published in 2024; recitals have been
+ * stable since then and snapshots from any 2024 date are equivalent.
+ */
+export function waybackUrl(liveUrl: string): string {
+  return `https://web.archive.org/web/2024id_/${liveUrl}`;
+}
+
+/**
+ * Fetch with automatic Wayback Machine fallback. Same signature as
+ * `fetchText`, but if the primary URL throws (e.g. redirect loop, 5xx
+ * after retries), we try the Wayback snapshot once before giving up.
+ *
+ * Why a single fallback: a chained series of fallbacks (Wayback -> EUR-Lex
+ * -> ...) bloats the scraper and hides real upstream bugs. Wayback covers
+ * every case we've hit so far; we add more only when needed.
+ *
+ * Returns { html, origin } so callers can stamp the source of the bytes
+ * they persisted into the corpus metadata.
+ */
+export async function fetchTextWithWaybackFallback(
+  url: string,
+): Promise<{ html: string; origin: "live" | "wayback" }> {
+  try {
+    const html = await fetchText(url);
+    return { html, origin: "live" };
+  } catch (err) {
+    log.warn(
+      { url, err: err instanceof Error ? err.message : String(err) },
+      "scrape.fallback.wayback",
+    );
+    const archived = await fetchText(waybackUrl(url));
+    return { html: archived, origin: "wayback" };
+  }
+}
+/**
  * Save raw bytes to disk. The path is `data/raw/<namespace>/<file>`.
  *
  * Why persist raw: the chunker is the most volatile part of the pipeline

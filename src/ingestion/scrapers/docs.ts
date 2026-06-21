@@ -25,7 +25,7 @@
  */
 import { log } from "@/lib/logger";
 import type { RawDocument } from "../types";
-import { fetchText, htmlToMarkdown, persistRaw, slugifyPath } from "./_shared";
+import { fetchText, fetchTextWithWaybackFallback, htmlToMarkdown, persistRaw, slugifyPath } from "./_shared";
 
 /**
  * The list of Article numbers we always ingest. We hard-code the list
@@ -147,8 +147,11 @@ async function scrapeRecital(n: number): Promise<RawDocument | null> {
   const sourceId = buildRecitalSourceId(n);
 
   let html: string;
+  let origin: "artificialintelligenceact.eu" | "web.archive.org";
   try {
-    html = await fetchText(url);
+    const result = await fetchTextWithWaybackFallback(url);
+    html = result.html;
+    origin = result.origin === "live" ? "artificialintelligenceact.eu" : "web.archive.org";
   } catch (err) {
     log.warn({ sourceId, url, err: String(err) }, "scrape.recital.fetchFailed");
     return null;
@@ -170,7 +173,7 @@ async function scrapeRecital(n: number): Promise<RawDocument | null> {
     text: markdown,
     kind: "docs",
     metadata: {
-      origin: "artificialintelligenceact.eu",
+      origin,
       canonical: EUR_LEX_CANONICAL,
       recitalNumber: n,
       kind: "recital",
