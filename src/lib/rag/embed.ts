@@ -123,13 +123,10 @@ async function voyageEmbed(texts: string[]): Promise<number[][]> {
 }
 
 /**
- * Local-mode guard. True when the user has no API keys AND the env
- * doesn't force a provider.
+ * Local-mode guard. True when the user has no Voyage API key.
  */
 function shouldUseLocalEmbedder(): boolean {
-  if (env.EMBEDDING_PROVIDER === "voyage" && !env.VOYAGE_API_KEY) return true;
-  if (env.EMBEDDING_PROVIDER === "openai" && !env.OPENAI_API_KEY) return true;
-  return false;
+  return !env.VOYAGE_API_KEY;
 }
 
 /**

@@ -72,10 +72,8 @@ Options:
   --help, -h                          Show this help
 
 Environment variables (see .env.example):
-  VOYAGE_API_KEY            Required for embedding (unless --dry-run).
-  OPENAI_API_KEY            Fallback if EMBEDDING_PROVIDER=openai.
-  EMBEDDING_PROVIDER        "voyage" (default) or "openai".
-  EMBEDDING_MODEL           "voyage-code-3" (default) | "voyage-3" | "text-embedding-3-small".
+  VOYAGE_API_KEY              Required for embedding (unless --dry-run).
+  EMBEDDING_MODEL             "voyage-code-3" (default) | "voyage-law-2" | "voyage-3".
   POSTGRES_CONNECTION_STRING  Required when VECTOR_BACKEND=pg.
   VECTOR_BACKEND            "pg" (default in prod) | "memory" (default in dev).
   MASTRA_REF                Git ref for the source scraper (default: main).

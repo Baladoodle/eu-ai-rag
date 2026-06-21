@@ -54,21 +54,18 @@ const schema = z.object({
 
   // --- Embeddings ---------------------------------------------------------
   /**
-   * Voyage AI is the default. OpenAI is a fallback for environments where
-   * Voyage isn't reachable. We treat the empty string as "unset" so a stray
-   * .env line doesn't break the build.
+   * Voyage AI is the only supported embedding provider. We treat the
+   * empty string as "unset" so a stray .env line doesn't break the build.
    */
   VOYAGE_API_KEY: optionalString,
-  OPENAI_API_KEY: optionalString,
 
   /**
    * The model is switchable so we can A/B test voyage-law-2 vs voyage-3
-   * without code changes. The strings are constrained so a typo is caught
-   * by Zod instead of an obscure 4xx from the API.
+   * vs voyage-code-3 without code changes. The strings are constrained
+   * so a typo is caught by Zod instead of an obscure 4xx from the API.
    */
-  EMBEDDING_PROVIDER: z.enum(["voyage", "openai"]).default("voyage"),
   EMBEDDING_MODEL: z
-    .enum(["voyage-law-2", "voyage-3", "voyage-code-3", "text-embedding-3-small"])
+    .enum(["voyage-law-2", "voyage-3", "voyage-code-3"])
     .default("voyage-law-2"),
 
   // --- Vector store -------------------------------------------------------

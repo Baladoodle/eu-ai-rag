@@ -1,10 +1,9 @@
 /**
  * ingestion/embedder.ts
  * ----------------------------------------------------------------------------
- * Wraps Voyage AI (and an OpenAI fallback) for batched embedding of
- * chunked text. The function signature is deliberately identical to
- * what the rest of the codebase expects: `embed(texts) -> vectors`,
- * with one float array per input.
+ * Wraps Voyage AI for batched embedding of chunked text. The function
+ * signature is deliberately identical to what the rest of the codebase
+ * expects: `embed(texts) -> vectors`, with one float array per input.
  *
  * Why we need an embedder (educational note for someone new to RAGs):
  *   Retrieval in a RAG system is "given a query, find the most similar
@@ -47,7 +46,7 @@ let voyageClient: VoyageAIClient | null = null;
 function getVoyage(): VoyageAIClient {
   if (!voyageClient) {
     if (!env.VOYAGE_API_KEY) {
-      throw new Error("VOYAGE_API_KEY is required when EMBEDDING_PROVIDER=voyage");
+      throw new Error("VOYAGE_API_KEY is required");
     }
     voyageClient = new VoyageAIClient({ apiKey: env.VOYAGE_API_KEY });
   }
@@ -100,41 +99,7 @@ async function embedBatchVoyage(texts: string[]): Promise<number[][]> {
   );
 }
 
-async function embedBatchOpenAI(texts: string[]): Promise<number[][]> {
-  // Lazy-import OpenAI so a Voyage-only dev doesn't need the package.
-  if (!env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai");
-  }
-  const { default: OpenAI } = (await import("openai")) as { default: new (cfg: { apiKey: string }) => { embeddings: { create: (args: { model: string; input: string[] }) => Promise<{ data: Array<{ embedding: number[] }> }> } } };
-  const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-  return pRetry(
-    async () => {
-      const res = await client.embeddings.create({
-        model: "text-embedding-3-small",
-        input: texts.map(truncate),
-      });
-      if (!res.data || res.data.length !== texts.length) {
-        throw new Error(`OpenAI returned ${res.data.length} vectors for ${texts.length} inputs`);
-      }
-      return res.data.map((d) => d.embedding);
-    },
-    {
-      retries: 4,
-      minTimeout: 1_000,
-      maxTimeout: 20_000,
-      factor: 2,
-      onFailedAttempt: (err) => {
-        log.warn(
-          { attempt: err.attemptNumber, remaining: err.retriesLeft, err: err.error?.message ?? String(err.error) },
-          "embedder.openai.retry",
-        );
-      },
-    },
-  );
-}
-
 async function embedBatch(texts: string[]): Promise<number[][]> {
-  if (env.EMBEDDING_PROVIDER === "openai") return embedBatchOpenAI(texts);
   return embedBatchVoyage(texts);
 }
 
@@ -184,7 +149,7 @@ export async function embedChunks(chunks: ReadonlyArray<ChunkRecord>): Promise<E
   }
 
   log.info(
-    { embedded: out.length, batches: totalBatches, model: env.EMBEDDING_MODEL, provider: env.EMBEDDING_PROVIDER },
+    { embedded: out.length, batches: totalBatches, model: env.EMBEDDING_MODEL },
     "embedder.done",
   );
   return out;

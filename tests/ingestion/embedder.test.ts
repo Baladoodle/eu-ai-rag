@@ -59,10 +59,8 @@ vi.mock("voyageai", () => {
 
 vi.mock("@/lib/env", () => ({
   env: {
-    EMBEDDING_PROVIDER: "voyage",
     EMBEDDING_MODEL: "voyage-code-3",
     VOYAGE_API_KEY: "test-key",
-    OPENAI_API_KEY: undefined,
     MASTRA_REF: "main",
     INGEST_LIMIT: undefined,
     DRY_RUN: undefined,
