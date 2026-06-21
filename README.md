@@ -1,8 +1,10 @@
-# eu-ai-act-expert
+# EU AI Act RAG
+
+<img width="1866" height="914" alt="image" src="https://github.com/user-attachments/assets/54efd6a1-0f6e-4dda-b201-39fa585b75a4" />
 
 A RAG chatbot that answers questions about the **EU AI Act** (Regulation (EU) 2024/1689) with cited, grounded responses.
 
-Built with Next.js 16, Mastra (chunking + vector store), Voyage AI's `voyage-law-2` embeddings, pgvector, and Claude.
+Built with Next.js 16, Mastra (chunking + vector store), Voyage AI's embeddings, pgvector, and Claude.
 
 ## Quickstart
 
