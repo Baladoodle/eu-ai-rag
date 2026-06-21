@@ -76,7 +76,7 @@ async function embedBatchVoyage(texts: string[]): Promise<number[][]> {
     async () => {
       const res = await client.embed({
         input: texts.map(truncate),
-        model: env.EMBEDDING_MODEL as "voyage-code-3" | "voyage-3",
+        model: env.EMBEDDING_MODEL as "voyage-law-2" | "voyage-3" | "voyage-code-3",
         inputType: "document",
       });
       if (!res.data || res.data.length !== texts.length) {

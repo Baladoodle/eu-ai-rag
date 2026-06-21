@@ -106,13 +106,12 @@ async function getVoyageClient(): Promise<import("voyageai").VoyageAIClient> {
 /**
  * Voyage embed. One batch per call. We don't batch here — callers
  * (the ingestion pipeline) slice into 64-doc batches and call us
- * once per batch.
  */
 async function voyageEmbed(texts: string[]): Promise<number[][]> {
   const client = await getVoyageClient();
   const res = await client.embed({
     input: texts,
-    model: (env.EMBEDDING_MODEL as "voyage-code-3" | "voyage-3") ?? "voyage-code-3",
+    model: (env.EMBEDDING_MODEL as "voyage-law-2" | "voyage-3" | "voyage-code-3") ?? "voyage-law-2",
     inputType: "document",
   });
   if (!res.data || res.data.length !== texts.length) {

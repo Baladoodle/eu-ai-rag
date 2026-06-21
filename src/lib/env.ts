@@ -62,14 +62,14 @@ const schema = z.object({
   OPENAI_API_KEY: optionalString,
 
   /**
-   * The model is switchable so we can A/B test voyage-code-3 vs voyage-3
+   * The model is switchable so we can A/B test voyage-law-2 vs voyage-3
    * without code changes. The strings are constrained so a typo is caught
    * by Zod instead of an obscure 4xx from the API.
    */
   EMBEDDING_PROVIDER: z.enum(["voyage", "openai"]).default("voyage"),
   EMBEDDING_MODEL: z
-    .enum(["voyage-code-3", "voyage-3", "text-embedding-3-small"])
-    .default("voyage-code-3"),
+    .enum(["voyage-law-2", "voyage-3", "voyage-code-3", "text-embedding-3-small"])
+    .default("voyage-law-2"),
 
   // --- Vector store -------------------------------------------------------
   POSTGRES_CONNECTION_STRING: optionalString,

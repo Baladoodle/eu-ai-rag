@@ -37,6 +37,7 @@ import type { RetrievedChunk } from "@/lib/vector-store-reader";
 import {
   asSourceId,
   type Citation,
+  type DebugSource,
   type Source,
 } from "@/../api-contract";
 import { makeSnippet } from "./prompt";
@@ -56,6 +57,8 @@ interface ChunkMetadata {
   title?: string;
   /** Optional H2/H3 heading within the page. */
   section?: string;
+  /** Top-level Article number, set by the docs scraper (see scrapers/docs.ts). */
+  articleNumber?: number;
 }
 
 /**
@@ -69,20 +72,24 @@ interface ChunkMetadata {
  */
 export function buildSources(
   chunks: ReadonlyArray<RetrievedChunk>,
-  options: { embeddingModel: string; now?: () => Date } = { embeddingModel: "voyage-code-3" },
+  options: { embeddingModel: string; now?: () => Date } = { embeddingModel: "voyage-law-2" },
 ): Source[] {
   const now = options.now ?? (() => new Date());
   return chunks.map((chunk, index) => chunkToSource(chunk, index, now()));
 }
 
 /**
- * Convert one chunk to a `Source` with stable id, snippet, and timestamp.
+ * Convert one chunk to the public `Source` shape (NO score field).
  *
  * Why we synthesize the id as `id#n`:
  *   The chunk id from the vector store is `namespace/slug#chunkIndex`.
  *   Appending the position-in-the-list (`#n`) gives us a unique key
  *   for React rendering *and* a way for the UI to deep-link to a
  *   specific citation chip in the answer.
+ *
+ * The raw cosine-similarity score is intentionally stripped from the
+ * user-facing `Source`. End users conflate it with answer correctness.
+ * Use `chunkToDebugSource` (private) when a server-side caller needs it.
  */
 function chunkToSource(chunk: RetrievedChunk, index: number, when: Date): Source {
   const meta = chunk.metadata as ChunkMetadata | undefined;
@@ -91,10 +98,19 @@ function chunkToSource(chunk: RetrievedChunk, index: number, when: Date): Source
     title: meta?.title ?? "Untitled source",
     url: meta?.url ?? "",
     ...(meta?.section ? { section: meta.section } : {}),
+    ...(typeof meta?.articleNumber === "number"
+      ? { articleNumber: String(meta.articleNumber) }
+      : {}),
     snippet: makeSnippet(chunk.text),
     fullText: chunk.text,
-    score: chunk.score,
     retrievedAt: when.toISOString(),
+  };
+}
+function chunkToDebugSource(chunk: RetrievedChunk, index: number, when: Date): DebugSource {
+  return {
+    ...chunkToSource(chunk, index, when),
+    score: chunk.score,
+    chunkId: chunk.id,
   };
 }
 
@@ -111,7 +127,7 @@ function chunkToSource(chunk: RetrievedChunk, index: number, when: Date): Source
  */
 export function buildCitations(
   chunks: ReadonlyArray<RetrievedChunk>,
-  options: { embeddingModel: string; now?: () => Date } = { embeddingModel: "voyage-code-3" },
+  options: { embeddingModel: string; now?: () => Date } = { embeddingModel: "voyage-law-2" },
 ): Citation[] {
   const sources = buildSources(chunks, options);
   return sources.map((source, idx) => ({
@@ -205,12 +221,31 @@ export function stripCitationMarkers(assistantText: string): string {
 /**
  * Log a summary of the citations we're about to ship to the client.
  * Helps the eval/observability story without leaking chunk text into logs.
+ *
+ * Takes raw chunks (not Citations) so it can build DebugSources internally
+ * and emit the raw cosine similarity for ops/debugging. The public `Source`
+ * shape intentionally does NOT carry `score` (see `chunkToSource`).
+ *
+ * `diversity` is optional retrieval metadata — when supplied we log
+ * `uniqueSources` and `maxPerArticle` so ops can spot over-clustered
+ * answers without paging back to the retrieval layer.
  */
-export function logCitationSummary(citations: ReadonlyArray<Citation>): void {
+export function logCitationSummary(
+  chunks: ReadonlyArray<RetrievedChunk>,
+  options: {
+    now?: () => Date;
+    diversity?: { uniqueSources: number; maxPerArticle: number };
+  } = {},
+): void {
+  const when = options.now ? options.now() : new Date();
+  const debug = chunks.map((chunk, index) => chunkToDebugSource(chunk, index, when));
   log.info(
     {
-      count: citations.length,
-      topScore: citations[0]?.source.score ?? 0,
+      count: debug.length,
+      topScore: debug[0]?.score ?? 0,
+      topChunkId: debug[0]?.chunkId,
+      uniqueSources: options.diversity?.uniqueSources ?? null,
+      maxPerArticle: options.diversity?.maxPerArticle ?? null,
     },
     "citations.built",
   );
