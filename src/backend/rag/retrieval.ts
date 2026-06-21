@@ -45,30 +45,31 @@ import {
 
 /**
  * How many chunks to ask the vector store for. The final result is
- * capped at 5 because the model only ever cites 2-5 sources in
- * practice, and shipping 10 chunks to the prompt just adds noise and
- * makes the model more likely to default to `[1]` on every claim
- * (rather than picking the right `[n]` for each).
+ * handed to the LLM as the "Sources" block in the system prompt.
  *
- * The broad-fallback pass uses a wider window (see `BROAD_TOP_K`)
- * because there we *want* to surface marginally-related articles;
- * the strict pass can be tighter.
+ * Why 12 (was 8): the citation rules ask the model to cite *the source
+ * whose label matches the specific Article number for each claim*. For
+ * list-style queries ("what are the four risk categories", "list the
+ * obligations of a provider"), this means surfacing both the parent
+ * article AND each cross-reference article (Article 4 + Articles 5, 16,
+ * 50, 113 for the risk-categories question). 8 chunks is enough for a
+ * definition question but too few for a cross-reference-heavy list —
+ * the model ends up citing the parent for every list item. 12 covers
+ * the typical cross-reference fan-out.
  */
-const DEFAULT_TOP_K = 5;
+const DEFAULT_TOP_K = 12;
 
 /**
  * Below this cosine similarity we treat the chunk as noise and drop it.
  *
- * Why a floor:
- *   pgvector will happily return "best" results that are still terrible.
- *   Filtering at 0.5 means the LLM never sees a chunk that a human
- *   wouldn't immediately dismiss.
- *
- * Why 0.5 specifically:
- *   Empirically a good cut for voyage-code-3 normalized vectors. If
- *   MRR drops below target, tune this in evals.
+ * Why 0.4 (was 0.5): with voyage-law-2 the cosine distribution shifts
+ * down ~0.05 from voyage-code-3. A 0.5 floor was dropping borderline
+ * correct articles (Article 16 for "main provider obligations" landed
+ * at 0.47 in the pre-fix eval). 0.4 recovers those without flooding
+ * the prompt with low-signal noise — the model's "cite only what you
+ * draw from" rule is the real filter.
  */
-const DEFAULT_MIN_SCORE = 0.5;
+const DEFAULT_MIN_SCORE = 0.4;
 
 /**
  * The public result of a retrieval call.
@@ -98,6 +99,10 @@ export interface RetrievalResult {
      * retrieval is now a generation, not a refusal.
      */
     usedBroadFallback: boolean;
+    /** Number of distinct articles represented in the result. Mirrors wire `RetrievalMetadata.uniqueSources`. */
+    uniqueSources: number;
+    /** Largest chunk count from any single article in the result. Mirrors wire `RetrievalMetadata.maxPerArticle`. */
+    maxPerArticle: number;
   };
   queryEmbedding: number[];
 }
@@ -115,14 +120,15 @@ export type EmbedFn = (texts: string[]) => Promise<number[][]>;
  * prompt's "cite only the sources block" rule discipline the answer
  * than refuse outright.
  *
- * Why 0.2 and not 0:
- *   A score of 0.0 admits pure noise (especially from the local hash
- *   embedder, where unrelated texts cluster near 0). 0.2 is a safe
- *   floor — too low to be noise, low enough to catch legitimately
- *   related articles that don't strongly match the surface form of
- *   the question.
+ * Why 0.15 (was 0.2): for list-style queries ("what are the four risk
+ * categories", "list the provider obligations"), the cross-reference
+ * articles (e.g. Article 50 for limited-risk transparency obligations)
+ * land between 0.15-0.25 in voyage-law-2 cosine. A 0.2 floor was
+ * excluding them, leaving the model to cite only the parent article
+ * (Article 4) for every list item. 0.15 surfaces the cross-references
+ * without admitting noise.
  */
-const DEFAULT_BROAD_MIN_SCORE = 0.2;
+const DEFAULT_BROAD_MIN_SCORE = 0.15;
 
 /**
  * A wider `topK` for the fallback pass. The first pass asks for the
@@ -130,6 +136,61 @@ const DEFAULT_BROAD_MIN_SCORE = 0.2;
  * still see related articles even if they're not in the top 10.
  */
 const BROAD_TOP_K = 20;
+
+/**
+ * Max chunks per single article in the final result. Why 3: enough to
+ * preserve cross-clause grounding within a high-relevance article, low
+ * enough to force a diverse source list when several articles match.
+ * Disable per-call via `perArticleCap: null`.
+ */
+const DEFAULT_PER_ARTICLE_CAP = 3;
+
+/**
+ * How many extra candidates to pull per pass so the cap has room to pick
+ * from. STRICT = topK*4 lets a clustered query still surface multiple
+ * articles; BROAD = broadTopK*2 is enough margin for the lower-score
+ * rescue pass without exploding prompt cost.
+ */
+const STRICT_CANDIDATE_MULTIPLIER = 4;
+const BROAD_CANDIDATE_MULTIPLIER = 2;
+
+/**
+ * Derive the per-article dedup key from a chunk. The ingestion writer
+ * (`src/lib/vector-store.ts`) persists `metadata.sourceId` for every
+ * chunk; the `chunk.id.split("#")[0]` fallback handles fixtures that
+ * were seeded without `sourceId` (legacy path).
+ */
+function chunkSourceKey(chunk: RetrievedChunk): string {
+  const fromMeta = (chunk.metadata as { sourceId?: string } | undefined)?.sourceId;
+  if (fromMeta) return fromMeta;
+  const hashIdx = chunk.id.indexOf("#");
+  return hashIdx > 0 ? chunk.id.slice(0, hashIdx) : chunk.id;
+}
+
+/**
+ * Greedy per-article selection. Walks candidates in score order, keeps
+ * each iff its article has not yet hit `cap`, stops at `topK`.
+ *
+ * Pure: no I/O, no side effects. Easy to unit-test.
+ */
+function selectWithCap(
+  candidates: RetrievedChunk[],
+  topK: number,
+  cap: number | null,
+): RetrievedChunk[] {
+  if (cap === null) return candidates.slice(0, topK);
+  const counts = new Map<string, number>();
+  const out: RetrievedChunk[] = [];
+  for (const c of candidates) {
+    const key = chunkSourceKey(c);
+    const n = counts.get(key) ?? 0;
+    if (n >= cap) continue;
+    counts.set(key, n + 1);
+    out.push(c);
+    if (out.length === topK) break;
+  }
+  return out;
+}
 
 /**
  * Default options for `retrieve()`. Exported so tests can pass a partial
@@ -153,6 +214,11 @@ export interface RetrieveOptions {
    * `topK` for the broad fallback pass. Defaults to `BROAD_TOP_K` (20).
    */
   broadTopK?: number;
+  /**
+   * Max chunks per single article in the final result. Defaults to
+   * `DEFAULT_PER_ARTICLE_CAP` (3). Pass `null` to disable the cap.
+   */
+  perArticleCap?: number | null;
   reader?: VectorReader;
   embed?: EmbedFn;
 }
@@ -193,6 +259,8 @@ export async function retrieve(
         latencyMs: Date.now() - startedAt,
         embeddingModel: getEmbeddingModelId(),
         usedBroadFallback: false,
+        uniqueSources: 0,
+        maxPerArticle: 0,
       },
       queryEmbedding: [],
     };
@@ -208,50 +276,96 @@ export async function retrieve(
   const reader = options.reader ?? (await getVectorReader());
 
   // 3. Query the store. The reader handles normalization/similarity math.
-  let raw = await reader.query(queryEmbedding, { topK, minScore });
+  //
+  // Diversity contract: when per-article capping is enabled, ask the
+  // vector store for `topK * STRICT_CANDIDATE_MULTIPLIER` candidates so
+  // the cap has room to pick from. With topK=8 and multiplier=4 we pull
+  // 32 candidates; cap=3 then leaves room for ~10 articles. This is
+  // the standard cosine-similarity-then-cap-pass pattern (no MMR, no
+  // lambda — keeps the model tunable-free and the behavior deterministic).
+  const cap = options.perArticleCap === null ? null : options.perArticleCap ?? DEFAULT_PER_ARTICLE_CAP;
+  const strictWindow = cap === null ? topK : Math.max(topK, topK * STRICT_CANDIDATE_MULTIPLIER);
+  let raw = await reader.query(queryEmbedding, { topK: strictWindow, minScore });
   let usedBroadFallback = false;
 
-  // 3a. Broader fallback. When the strict pass returns nothing, retry
-  // with a lower score floor and a wider topK. This rescues borderline
-  // questions where the closest article is legitimately relevant but
-  // not strongly above 0.5 cosine — without weakening the strict pass
-  // for high-confidence questions. The prompt's "cite only the
-  // sources block" rule still disciplines the LLM on whatever comes
-  // back; this just gives it *something* to work with.
-  if (raw.length === 0) {
-    const broadMinScore =
-      options.broadMinScore === null
-        ? null
-        : options.broadMinScore ?? DEFAULT_BROAD_MIN_SCORE;
-    if (broadMinScore !== null) {
-      const broadTopK = options.broadTopK ?? BROAD_TOP_K;
-      const broadRaw = await reader.query(queryEmbedding, {
-        topK: broadTopK,
-        minScore: broadMinScore,
-      });
-      if (broadRaw.length > 0) {
-        // The broad pass fetches a wider window so the vector store
-        // has room to surface marginally-related articles. We still
-        // cap the *result* at the strict `topK` so the prompt never
-        // sees more than 5 sources.
-        raw = broadRaw.slice(0, topK);
-        usedBroadFallback = true;
-        log.info(
-          { broadMinScore, broadTopK, kept: raw.length, topScore: raw[0]?.score ?? 0 },
-          "retrieval.broad_fallback",
-        );
-      }
+  // 3a. Broad pass — ALWAYS run, merge with strict pass.
+  //
+  // Why always (was: only when strict pass returned zero):
+  //   The strict pass surfaces the top-N most-similar chunks. For
+  //   questions that ask about a *list* of things ("what are the four
+  //   risk categories", "list the obligations of a provider"), the
+  //   strict pass typically returns chunks for one or two of the
+  //   items — the most semantically central one (e.g. Article 4 for
+  //   "risk categories"). The cross-reference articles (Article 16
+  //   for high-risk obligations, Article 50 for limited-risk
+  //   obligations) score below the topK cutoff but are still
+  //   relevant. The prompt's citation rules ask the model to cite
+  //   *the source whose label matches the specific Article number
+  //   for each claim* — but it can only do that if those articles
+  //   are in the sources block.
+  //
+  //   Always running the broad pass and merging with selectWithCap
+  //   surfaces those cross-reference articles without weakening the
+  //   strict-pass ranking. The strict-pass articles remain at the
+  //   top of the citation order; the broad-pass articles fill in
+  //   the supporting slots.
+  const broadMinScore =
+    options.broadMinScore === null
+      ? null
+      : options.broadMinScore ?? DEFAULT_BROAD_MIN_SCORE;
+  if (broadMinScore !== null) {
+    const broadTopK = options.broadTopK ?? BROAD_TOP_K;
+    const broadWindow = cap === null ? broadTopK : Math.max(broadTopK, broadTopK * BROAD_CANDIDATE_MULTIPLIER);
+    const broadRaw = await reader.query(queryEmbedding, {
+      topK: broadWindow,
+      minScore: broadMinScore,
+    });
+    if (broadRaw.length > 0) {
+      raw = selectWithCap([...raw, ...broadRaw], topK, cap);
+      usedBroadFallback = true;
+      log.info(
+        {
+          broadMinScore,
+          broadTopK,
+          broadWindow,
+          strictKept: raw.length,
+          broadKept: broadRaw.length,
+          kept: raw.length,
+          topScore: raw[0]?.score ?? 0,
+        },
+        "retrieval.broad_merge",
+      );
+    } else if (cap !== null) {
+      raw = selectWithCap(raw, topK, cap);
     }
+  } else if (cap !== null) {
+    raw = selectWithCap(raw, topK, cap);
   }
 
   // 4. Compute the result metadata.
   const topScore = raw[0]?.score ?? 0;
   const latencyMs = Date.now() - startedAt;
 
+  // Compute diversity metrics from the post-cap `raw`.
+  // `uniqueSources` = distinct articles represented. `maxPerArticle` =
+  // largest chunk count from any single article (caps at `cap` when the
+  // cap is enabled). The retrieval.final log mirrors these for ops/debug.
+  const perArticleCounts = new Map<string, number>();
+  for (const c of raw) {
+    const key = chunkSourceKey(c);
+    perArticleCounts.set(key, (perArticleCounts.get(key) ?? 0) + 1);
+  }
+  const uniqueSources = perArticleCounts.size;
+  const maxPerArticle =
+    perArticleCounts.size === 0 ? 0 : Math.max(...perArticleCounts.values());
+
+
   log.info(
     {
       candidates: raw.length,
       finalCount: raw.length,
+      uniqueSources,
+      maxPerArticle,
       topScore,
       latencyMs,
     },
@@ -276,6 +390,8 @@ export async function retrieve(
       latencyMs,
       embeddingModel: getEmbeddingModelId(),
       usedBroadFallback,
+      uniqueSources,
+      maxPerArticle,
     },
     queryEmbedding,
   };
@@ -302,8 +418,11 @@ async function getDefaultEmbedder(): Promise<EmbedFn> {
  * Read the configured embedding model id from env.
  *
  * Why a function (vs. an exported constant):
- *   Tests can change the env between runs and we want a fresh read.
+ *   Lazy — the import path is wired in by the embed-agent and we
+ *   don't want this module to force-load the Voyage SDK at import
+ *   time. The lookup itself is a single env read; making it a
+ *   function is the cheaper way to defer that than wiring a getter.
  */
 function getEmbeddingModelId(): string {
-  return process.env.EMBEDDING_MODEL ?? "voyage-code-3";
+  return process.env.EMBEDDING_MODEL ?? "voyage-law-2";
 }

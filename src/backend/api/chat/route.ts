@@ -71,15 +71,33 @@ type UIMessageStream = AsyncIterableStream<UIMessageChunk>;
  * normalizer below reduces both shapes to a single `parts`-bearing
  * form for the rest of the pipeline.
  *
- * Why we restrict `parts[].type` to "text": v1 of the contract does
- * not support tool/file/reasoning parts. Anything else is dropped
- * during normalization, but the Zod schema rejects the whole message
- * so the client gets a clear validation error instead of silent loss.
+ * Why we accept ANY part type (not just `text`):
+ *   Assistant messages round-trip through the SDK and accumulate extra
+ *   part types over a multi-turn conversation — e.g. the backend's
+ *   `data-sources` part gets re-sent on the next turn. Rejecting any
+ *   non-text part would 400 the second message of any conversation.
+ *   We only require that the message contain at least one `text` part
+ *   with non-empty content; everything else is dropped by the
+ *   normalizer. The refine below enforces that.
  */
-const incomingMessagePartSchema = z.object({
+const incomingMessageTextPartSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
+
+/**
+ * Any part we don't care about. We accept it and drop it during
+ * normalization. The `passthrough` keeps unknown fields intact so
+ * future SDK part types don't break the contract.
+ */
+const incomingMessageOtherPartSchema = z
+  .object({ type: z.string() })
+  .passthrough();
+
+const incomingMessagePartSchema = z.union([
+  incomingMessageTextPartSchema,
+  incomingMessageOtherPartSchema,
+]);
 
 const incomingMessageSchema = z
   .object({
@@ -88,11 +106,20 @@ const incomingMessageSchema = z
     parts: z.array(incomingMessagePartSchema).optional(),
     content: z.string().optional(),
   })
-  // At least one of `parts` or `content` must be present and non-empty.
+  // At least one of `parts` or `content` must be present and non-empty
+  // (counting only the text parts — data/source parts don't count as
+  // user-visible content).
   .refine(
-    (m) =>
-      (Array.isArray(m.parts) && m.parts.some((p) => p.text.trim().length > 0)) ||
-      (typeof m.content === "string" && m.content.trim().length > 0),
+    (m) => {
+      const textParts = (m.parts ?? []).filter(
+        (p): p is { type: "text"; text: string } =>
+          p.type === "text" && typeof p.text === "string",
+      );
+      const hasText = textParts.some((p) => p.text.trim().length > 0);
+      const hasContent =
+        typeof m.content === "string" && m.content.trim().length > 0;
+      return hasText || hasContent;
+    },
     { message: "Message must include non-empty `parts` or `content`" },
   );
 
@@ -241,10 +268,20 @@ export async function POST(req: Request): Promise<Response> {
     // `createUIMessageStream` directly lets us keep the stream's
     // "shape" consistent and append the custom part in the right
     // position.
+    const retrievalMeta = pipelineOut.retrieval.metadata;
+    const wireRetrieval: RetrievalMetadata = {
+      candidates: retrievalMeta.candidates,
+      finalCount: retrievalMeta.finalCount,
+      topScore: retrievalMeta.topScore,
+      latencyMs: retrievalMeta.latencyMs,
+      embeddingModel: retrievalMeta.embeddingModel,
+      uniqueSources: retrievalMeta.uniqueSources,
+      maxPerArticle: retrievalMeta.maxPerArticle,
+    };
     const streamWithCitations = appendSourcesPart(
       pipelineOut.stream as unknown as ReadableStream<UIMessageChunk>,
       pipelineOut.citations,
-      pipelineOut.retrieval.metadata,
+      wireRetrieval,
     );
 
     return createUIMessageStreamResponse({

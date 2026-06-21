@@ -136,50 +136,51 @@ export async function runRagPipeline(
   // --- Step 2: Handle the empty-retrieval case explicitly ---
   //
   // Why short-circuit:
-  //   If the vector store returned nothing OR the best score is below
-  //   the empty threshold, the LLM has no grounded evidence to draw
-  //   from. Letting it try anyway is the most common RAG failure mode:
-  //   the model will invent a plausible-sounding answer. The system
-  //   prompt's refusal rule covers this, but we'd rather not even
-  //   *call* the LLM — saves tokens, latency, and the cost of a 4xx
-  //   from the LLM.
-  if (
-    retrieval.chunks.length === 0 ||
-    retrieval.metadata.topScore < (localMode ? LOCAL_EMPTY_RETRIEVAL_THRESHOLD : EMPTY_RETRIEVAL_THRESHOLD)
-  ) {
-    // Broad-fallback rescue: if the retrieval layer already widened
-    // its score floor and we still got nothing (or a result below the
-    // empty threshold), refusing is the right call. But if the
-    // broad-fallback path *did* return a non-empty result with a
-    // positive score, that means a borderline-but-relevant article
-    // came back — the strict threshold here would wrongly drop it.
-    // We lower the bar for that case to one tied to the broad
-    // fallback's score floor (0.2 in production).
-    if (retrieval.metadata.usedBroadFallback && retrieval.chunks.length > 0) {
-      // Proceed to generation with the broad-fallback corpus.
-      log.info(
-        {
-          chunkCount: retrieval.chunks.length,
-          topScore: retrieval.metadata.topScore,
-        },
-        "pipeline.broad_fallback_proceed",
-      );
-    } else {
-      log.warn(
-        {
-          chunkCount: retrieval.chunks.length,
-          topScore: retrieval.metadata.topScore,
-        },
-        "pipeline.empty_retrieval",
-      );
+  //   If the vector store returned nothing, the LLM has no grounded
+  //   evidence to draw from. Letting it try anyway is the most common
+  //   RAG failure mode: the model will invent a plausible-sounding
+  //   answer. The system prompt's refusal rule covers this, but we'd
+  //   rather not even *call* the LLM — saves tokens, latency, and the
+  //   cost of a 4xx from the LLM.
+  //
+  // Borderline non-empty (chunks present but top score below the empty
+  // threshold) is treated as "proceed". The retrieval layer's broad
+  // fallback already widened the score floor when the strict pass
+  // returned zero; here the strict pass already returned a non-empty
+  // result, so the broad path didn't run. Either way, the prompt's
+  // "cite only the sources block" rule disciplines whatever the model
+  // produces — the worst case is a low-confidence answer, not a refusal.
+  const trulyEmpty = retrieval.chunks.length === 0;
+  const borderlineNonEmpty =
+    !trulyEmpty &&
+    retrieval.metadata.topScore <
+      (localMode ? LOCAL_EMPTY_RETRIEVAL_THRESHOLD : EMPTY_RETRIEVAL_THRESHOLD);
 
-      return buildRefusalStream({
-        retrieval,
-        reason:
-          retrieval.chunks.length === 0 ? "no_chunks" : "low_confidence",
-      });
-    }
+  if (trulyEmpty) {
+    log.warn(
+      {
+        chunkCount: retrieval.chunks.length,
+        topScore: retrieval.metadata.topScore,
+      },
+      "pipeline.empty_retrieval",
+    );
+
+    return buildRefusalStream({
+      retrieval,
+    });
   }
+
+  if (borderlineNonEmpty) {
+    log.info(
+      {
+        chunkCount: retrieval.chunks.length,
+        topScore: retrieval.metadata.topScore,
+        usedBroadFallback: retrieval.metadata.usedBroadFallback,
+      },
+      "pipeline.borderline_proceed",
+    );
+  }
+
 
   // --- Step 3: Build the prompt ---
   //
@@ -302,15 +303,9 @@ function messageText(m: IncomingMessage): string {
  *   LLM. Centralizing the synthetic stream construction here means
  *   the route handler doesn't have to special-case it.
  */
-function buildRefusalStream(params: {
-  retrieval: RetrievalResult;
-  reason: "no_chunks" | "low_confidence";
-}): PipelineOutput {
+function buildRefusalStream(params: { retrieval: RetrievalResult }): PipelineOutput {
   const refusalText =
-    params.reason === "no_chunks"
-      ? "I couldn't find anything on that in the EU AI Act sources I have. Could you rephrase the question, or mention the article or topic by name?"
-      : "I found some sources but none of them confidently answer your question. Could you rephrase or add more detail?";
-
+    "I couldn't find anything on that in the EU AI Act sources I have. Could you rephrase the question, or mention the article or topic by name?";
   // We synthesize a `UIMessageStream` from a single text-delta chunk.
   // The AI SDK's text streaming protocol uses `text-start`, `text-delta`,
   // and `text-end` events. We emit a delta directly; the SDK will

@@ -74,9 +74,10 @@ const MAX_TOKENS = 2048;
 /**
  * Per-request timeout. Why: a hung request is worse than a fast
  * failure. Vercel kills the function at 60s on hobby, 300s on pro;
- * 25s is well under either and gives the model room for long answers.
+ * 45s gives the model room for long answers without saturating
+ * Anthropic's per-request latency budget.
  */
-const REQUEST_TIMEOUT_MS = 25_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 
 /**
  * A simplified message shape the LLM consumes. The frontend's
@@ -193,7 +194,10 @@ export function toModelMessages(
 export async function generate(
   options: GenerateOptions,
 ): Promise<GenerationOutput> {
-  const modelId = options.modelId ?? process.env.MODEL_ID ?? "claude-sonnet-4-5";
+  // `||` (not `??`): an empty `MODEL_ID=""` from `.env.local` would otherwise
+  // mask the default. Aligns with the 4e23e35 commit's "empty env strings
+  // become undefined" intent for the embedding model path.
+  const modelId = options.modelId || process.env.MODEL_ID || "claude-sonnet-4-5";
 
   log.info(
     {
@@ -208,8 +212,7 @@ export async function generate(
   //   The `data-sources` part is appended to the same stream as the
   //   text. Building it up front means the stream can include the
   //   citations as soon as the text is done, with no per-token
-  //   coupling.
-  const citations = buildCitations(options.chunks, { embeddingModel: "voyage-code-3" });
+  const citations = buildCitations(options.chunks, { embeddingModel: "voyage-law-2" });
   log.debug({ count: citations.length }, "generation.citations.built");
 
   // Mock path: two distinct triggers short-circuit to the synthesized

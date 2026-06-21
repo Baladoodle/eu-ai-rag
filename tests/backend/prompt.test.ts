@@ -71,9 +71,9 @@ describe("prompt", () => {
     // real first source entry.
     const blockStart = out.indexOf("## Sources");
     const idx = out.indexOf("[1]", blockStart);
-    const snippet = out.slice(idx, idx + 2000);
+    const snippet = out.slice(idx, idx + 4000);
     expect(snippet).toContain("…");
-    expect(snippet.length).toBeLessThan(2000);
+    expect(snippet.length).toBeLessThan(4000);
   });
 
   it("emits a refusal-eligible prompt when retrieval is empty", () => {
@@ -147,10 +147,15 @@ describe("prompt", () => {
     expect(out).toMatch(/not themselves enforceable|enforceabl/i);
   });
 
-  it("refuses to give legal advice and points the user to a lawyer", () => {
+  it("refuses when sources do not address the question and offers no extra commentary", () => {
     const out = buildSystemPrompt([]);
-    expect(out).toMatch(/legal advice/i);
-    expect(out).toMatch(/qualified EU regulatory lawyer/i);
+    // The refusal rule must produce an exact, deterministic response —
+    // no disclaimers, no legal-advice preamble, no "I want to flag...".
+    expect(out).toMatch(/The provided context does not address that/);
+    // And it must NOT carry over the old legal-advice boilerplate
+    // (the project dropped that rule — too lawyerly for a focused
+    // Q&A tool).
+    expect(out).not.toMatch(/legal advice/i);
   });
 
   it("requires citations to be inline, never paragraph headers", () => {
@@ -167,9 +172,9 @@ describe("prompt", () => {
   it("includes a positive inline-citation example", () => {
     const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
     // The positive example must end a claim with [n] inside the sentence,
-    // not as a header. We anchor on the "Article 5 prohibits" phrasing
-    // because that's the canonical example in the prompt.
-    expect(out).toMatch(/Article 5 prohibits subliminal techniques \[\d+\]/);
+    // not as a header. We anchor on the "Article 6" phrasing because
+    // that's the canonical example in the prompt.
+    expect(out).toMatch(/An AI system is high-risk if it is a safety component of a product listed in Annex I \[\d+\]/);
   });
 
   it("includes a negative 'From source [1]' example marked INCORRECT", () => {
@@ -179,14 +184,15 @@ describe("prompt", () => {
     // somewhere near the "From source [1]" example so the model
     // learns the right rule.
     expect(out).toMatch(/Incorrect/);
-    expect(out).toMatch(/From source \[1\]: Article 5/);
+    expect(out).toMatch(/From source \[1\]: Article 6/);
   });
 
-  it("recommends 2 to 5 citations per response", () => {
+  it("bounds citation density with per-claim variation guidance", () => {
     const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
-    // The rules should bound citation density: a soft floor (at
-    // least 2) and a soft ceiling (5) with an escape hatch.
-    expect(out).toMatch(/2 to 5 citations|2-5 citations/);
+    // The prompt replaced the old "2 to 5 citations" rule with a
+    // per-claim variation rule — the model picks a different source
+    // for each claim rather than repeating [1] across a paragraph.
+    expect(out).toMatch(/Vary citations/i);
   });
 
   it("few-shot example uses inline [n] markers in the prose, not headers", () => {
@@ -202,10 +208,10 @@ describe("prompt", () => {
   it("explains the [n] marker maps to the n-th item in the rendered Sources list", () => {
     const out = buildSystemPrompt([{ id: "x#1", text: "ctx", score: 0.9 }]);
     // The Sources section must connect the inline [n] marker to
-    // the n-th item the user sees (with its type label + relevance
-    // score). This is what makes the citation chips in the UI line
-    // up with the prose.
+    // the n-th item the user sees (with its type label). Retrieval
+    // scores are intentionally NOT shown to the user (see Source
+    // type in api-contract.ts), so the prompt must not promise one.
     expect(out).toMatch(/correspond to the n-th item/);
-    expect(out).toMatch(/relevance score/);
+    expect(out).not.toMatch(/relevance score/);
   });
 });

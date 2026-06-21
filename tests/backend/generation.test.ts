@@ -56,6 +56,9 @@ describe("generation", () => {
       system: "you are a test",
       messages: [{ role: "user", content: "hi" }],
       chunks,
+      // Pin the modelId so the test is independent of `process.env.MODEL_ID`
+      // (which `.env.local` sets to `minimax-m3` for local dev).
+      modelId: "claude-sonnet-4-5",
     });
     expect(out.modelId).toBe("claude-sonnet-4-5");
     expect(out.citations).toHaveLength(1);

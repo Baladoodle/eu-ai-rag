@@ -51,7 +51,6 @@ vi.mock("@/backend/rag/pipeline", () => {
             url: "https://example.com",
             snippet: "stub snippet",
             fullText: "stub snippet",
-            score: 0.9,
             retrievedAt: "2026-06-10T00:00:00.000Z",
           },
         },
@@ -246,5 +245,61 @@ describe("/api/chat route", () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
+  });
+
+  it("accepts a multi-turn conversation where the assistant message has a data-sources part (regression: second turn 400)", async () => {
+    // The frontend's useChat echoes the full prior conversation on every
+    // send, so by the second turn the assistant message carries the
+    // backend's `data-sources` data part. The route must accept it
+    // and not 400 on non-text parts. Regression test for the bug where
+    // any non-text part type was rejected by the Zod schema, breaking
+    // the second message of every conversation.
+    const req = makeRequest({
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [{ type: "text", text: "What is Article 5?" }],
+        },
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Article 5 prohibits certain AI practices." },
+            {
+              type: "data-sources",
+              data: {
+                citations: [
+                  {
+                    index: 1,
+                    source: {
+                      id: "x#1" as never,
+                      title: "Article 5",
+                      url: "https://example.com",
+                      snippet: "...",
+                      fullText: "...",
+                      retrievedAt: "2026-06-10T00:00:00.000Z",
+                    },
+                  },
+                ],
+                retrieval: { candidates: 1, finalCount: 1, topScore: 0.9 },
+              },
+            },
+          ],
+        },
+        {
+          id: "u2",
+          role: "user",
+          parts: [{ type: "text", text: "What are the exceptions?" }],
+        },
+      ],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    // The latest user message becomes the query.
+    const calls = (runRagPipeline as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const arg = calls[0]?.[0] as { query?: string; messages?: unknown[] };
+    expect(arg.query).toBe("What are the exceptions?");
+    expect(arg.messages).toHaveLength(3);
   });
 });

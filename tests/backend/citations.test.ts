@@ -52,13 +52,45 @@ describe("citations", () => {
     expect(sources[0]?.id).toBe("mastra/rag/overview#1#1");
     expect(sources[0]?.title).toBe("RAG Overview");
     expect(sources[0]?.url).toBe("https://mastra.ai/docs/rag/overview");
-    expect(sources[0]?.score).toBeCloseTo(0.92);
+    expect(sources[0]).not.toHaveProperty("score");
     expect(sources[0]?.retrievedAt).toBe("2026-06-10T12:00:00.000Z");
   });
 
   it("buildSources includes section when present in metadata", () => {
     const sources = buildSources(chunks, { embeddingModel: "voyage-code-3", now: fixedNow });
     expect(sources[1]?.section).toBe("pgvector");
+  });
+
+  it("buildSources pins articleNumber on the wire when present in chunk metadata", () => {
+    const sources = buildSources(
+      [
+        {
+          id: "ai-act/article-16#1",
+          text: "Provider obligations under Article 16.",
+          score: 0.9,
+          metadata: {
+            url: "https://artificialintelligenceact.eu/article/16/",
+            title: "Article 16",
+            articleNumber: 16,
+          },
+        },
+        {
+          id: "ai-act/recital-10#1",
+          text: "Recital 10 explains background.",
+          score: 0.7,
+          metadata: {
+            url: "https://artificialintelligenceact.eu/recital/10/",
+            title: "Recital 10",
+          },
+        },
+      ],
+      { embeddingModel: "voyage-code-3", now: fixedNow },
+    );
+    expect(sources[0]?.articleNumber).toBe("16");
+    // Recital/Annex chunks without articleNumber in metadata emit no field
+    // (JSON.stringify drops undefined optional fields, wire stays minimal).
+    expect(sources[1]?.articleNumber).toBeUndefined();
+    expect(sources[1]).not.toHaveProperty("articleNumber");
   });
 
   it("buildSources falls back to a sensible title when metadata is missing", () => {
