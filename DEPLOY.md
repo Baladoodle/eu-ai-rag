@@ -17,7 +17,7 @@
 ## 1. Supabase — create the project + database
 
 1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and click **New project**.
-2. Pick a name (e.g. `mastra-expert`), a strong database password, and the **closest region** to your users.
+2. Pick a name (e.g. `eu-ai-act-expert`), a strong database password, and the **closest region** to your users.
 3. Wait ~90 seconds for the project to provision.
 4. Once it's ready, open **SQL Editor** (left sidebar).
 5. Click **New query** and paste the following SQL, then click **Run**:
@@ -87,7 +87,7 @@
 
 1. Open [console.anthropic.com](https://console.anthropic.com) and sign in.
 2. Go to **Settings → API Keys**.
-3. Click **Create Key**, name it `mastra-expert-prod`, copy the value (starts with `sk-ant-...`).
+3. Click **Create Key**, name it `eu-ai-act-expert-prod`, copy the value (starts with `sk-ant-...`).
 4. Make sure your account has **credit** on it — new accounts get a small free credit, then pay-as-you-go.
 
 This is your `ANTHROPIC_API_KEY`.
@@ -127,7 +127,7 @@ This is your `VOYAGE_API_KEY`.
 
    You can paste them as "production" values; Vercel also has "Preview" and "Development" scopes. Set the same values in **Production**; for **Preview** you can leave them blank to use the mock path.
 
-6. Click **Deploy**. The first build takes ~2 minutes. Vercel will assign a domain like `mastra-expert-xyz.vercel.app`.
+6. Click **Deploy**. The first build takes ~2 minutes. Vercel will assign a domain like `eu-ai-act-expert-xyz.vercel.app`.
 
 ---
 
@@ -155,11 +155,10 @@ Not in v1, but `scripts/ingest.ts` accepts a `--since <date>` flag for increment
 ---
 
 ## 6. Smoke test
-
-1. Open your Vercel domain (e.g. `https://mastra-expert-xyz.vercel.app`).
-2. Type a question: **"How do I configure Mastra with pgvector?"**
+1. Open your Vercel domain (e.g. `https://eu-ai-act-expert-xyz.vercel.app`).
+2. Type a question: **"What does Article 6 say about high-risk classification?"**
 3. You should see a streamed answer with `[1]` citation chips in the text and a source list in the side panel.
-4. Click a citation — it should open the underlying Mastra docs URL in a new tab.
+4. Click a citation — it should open the underlying EUR-Lex / `artificialintelligenceact.eu` URL in a new tab.
 
 If the answer comes back empty or the citations are wrong, jump to **Troubleshooting** below.
 
@@ -168,7 +167,7 @@ If the answer comes back empty or the citations are wrong, jump to **Troubleshoo
 ## 7. Run the eval against the deployed instance
 
 ```bash
-npm run eval -- --url https://mastra-expert-xyz.vercel.app
+npm run eval -- --url https://eu-ai-act-expert-xyz.vercel.app
 ```
 
 A markdown report lands in `evals/reports/latest.md`. You're looking for:

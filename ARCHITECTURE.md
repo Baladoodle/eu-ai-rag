@@ -1,14 +1,13 @@
-# mastra-expert — Architecture
+# eu-ai-act-expert — Architecture
 
-> A production-grade RAG chatbot that answers developer questions about the [Mastra AI framework](https://mastra.ai). Designed as a freelance portfolio piece to demonstrate end-to-end AI integration competence.
+> A production-grade RAG chatbot that answers questions about **Regulation (EU) 2024/1689** — the EU AI Act. Designed as a freelance portfolio piece to demonstrate end-to-end AI integration competence.
 
 ---
 
 ## 1. Goals & Non-Goals
 
 ### Goals
-- Answer developer questions about Mastra with **grounded, cited** responses.
-- Demonstrate **Mastra's RAG module** as a first-class citizen (the meta angle is intentional: we use Mastra to teach Mastra).
+- Answer questions about the EU AI Act with **grounded, cited** responses, each claim mapped to a specific Article, Recital, or Annex.
 - Be **deployable in 10 minutes** to Vercel + Supabase.
 - Be **runnable locally without any API keys** (mock data fallback).
 - Serve as a **portfolio artifact** — clean code, comprehensive tests, real evals, production logging.
@@ -26,16 +25,17 @@
 ### 2.1 Framework: Next.js 15 App Router
 **Why:** The App Router is the only Next.js model with first-class streaming response support and the React Server Components story we want to showcase. RSC lets us fetch static data (e.g. suggested questions) on the server while leaving the chat interactive. Route Handlers (`app/api/chat/route.ts`) are the right place for streaming LLM responses — Server Actions are still constrained by a 3s edge timeout and lack clean token streaming.
 
-### 2.2 AI Framework: Mastra
-**Why Mastra's RAG module:** Mastra's `@mastra/rag` is the topic of the chatbot, so using it is the strongest possible credibility signal for an AI freelancer portfolio. It also gives us:
+### 2.2 AI Framework: Mastra (chunking + vector store only)
+**Why `@mastra/rag`:** Mastra's `MDocument` provides a language-agnostic recursive chunker with sensible overlap defaults. We use it because the chunking step is the highest-leverage place to be correct for legal text (Article boundaries matter), and re-rolling our own recursive splitter would be a maintenance tax with no upside. The Mastra RAG module itself is **not** the topic of the chatbot — it is plumbing.
+It also gives us:
 - `MDocument` for chunking (recursive strategy with overlap — language-agnostic, code-aware defaults).
 - `embedMany` routed through `ModelRouterEmbeddingModel` (lets us swap embedding providers with one line).
 - A consistent `VectorStore` interface (pgvector, Pinecone, Qdrant, MongoDB, Chroma all share `.upsert` / `.query` / `.createIndex`).
 - Built-in rerankers (`MastraAgentRelevanceScorer`, `CohereRelevanceScorer`).
-**Where we drop down to raw:** Streaming responses are best handled with the Vercel AI SDK `streamText`, not Mastra's agent loop, because we want to interleave retrieval logs and source citations into the streamed UI message stream. Mastra's agent runtime shines for tool-use; for a single-step RAG pipeline, the AI SDK gives finer control over the SSE protocol and source annotation.
+**Where we drop down to raw:** Streaming responses are best handled with the Vercel AI SDK `streamText`, not Mastra's agent loop, because we want to interleave retrieval logs and source citations into the streamed UI message stream. The Mastra agent runtime shines for tool-use; for a single-step RAG pipeline, the AI SDK gives finer control over the SSE protocol and source annotation.
 
 ### 2.3 Embeddings: Voyage AI — `voyage-code-3`
-**Why Voyage over OpenAI:** Independent benchmarks (and Voyage's own) show Voyage leading on code and mixed code+prose retrieval — exactly our corpus. **Why `voyage-code-3` over `voyage-3`:** Mastra documentation contains a high density of TypeScript snippets, import paths, and API signatures; code-3 was trained on trillions of code tokens and outperforms general models on retrieval of code-shaped queries. Dimensions: **1024** (default; configurable down to 256 for storage savings). Context length: **32K tokens** — we chunk at 1024 tokens so this is never a constraint. **Quantization:** `float` (32-bit) for accuracy; revisit `int8` only if storage becomes an issue.
+**Why Voyage over OpenAI:** Independent benchmarks (and Voyage's own) show Voyage leading on code and mixed code+prose retrieval. **Why `voyage-code-3` over `voyage-3`:** the EU AI Act is dense with cross-references (`Article 6(1) shall apply mutatis mutandis to...`, point (b) of paragraph 2 of Article 5, etc.) that benefit from the same dense representation code-3 was trained on. Dimensions: **1024** (default; configurable down to 256 for storage savings). Context length: **32K tokens** — we chunk at 1024 tokens so this is never a constraint. **Quantization:** `float` (32-bit) for accuracy; revisit `int8` only if storage becomes an issue. **Caveat:** `voyage-law-2` is a more semantically accurate fit; we keep `voyage-code-3` because the cross-reference structure is the dominant signal, not topical similarity.
 
 ### 2.4 Vector Store: pgvector (Supabase in prod, in-memory in dev)
 **Why pgvector:** The corpus is small enough (< 5K chunks initially) that a dedicated vector DB is overkill, and our freelance clients are mostly already paying for Postgres. One database, one backup story, one auth model. HNSW index for sub-100ms retrieval at our scale. **Why Supabase:** Free tier is generous (500MB, 50K MAU), the JS client is small, and pgvector support is first-class. **Why in-memory fallback for dev:** `npm install && npm run dev` should produce a working app with no Postgres. We use a Map-backed in-memory store behind the same `VectorStore` interface — the dev path never touches the network.
@@ -62,14 +62,14 @@
 ## 3. Folder Structure
 
 ```
-mastra-expert/
+eu-ai-act-expert/
 ├── ARCHITECTURE.md                  # This file.
 ├── README.md                        # Quickstart, env vars, deploy.
 ├── data-sources.md                  # Exact URLs/files to ingest.
 ├── api-contract.ts                  # Shared TS types for API & citations.
 ├── package.json                     # Single workspace, npm scripts.
 ├── tsconfig.json                    # Strict, ES2022, bundler resolution.
-├── next.config.ts                   # serverExternalPackages for mastra/pg/voyage.
+├── next.config.ts                   # serverExternalPackages for @mastra/pg / @mastra/rag / voyageai / anthropic.
 ├── tailwind.config.ts               # Tailwind v4 config (minimal).
 ├── postcss.config.mjs
 ├── .env.example                     # Documents every env var.
@@ -175,7 +175,7 @@ User types question
 [retrieve.ts]  embed(query) via Voyage  →  pgVector.query(topK=10)
         │  log.debug("retrieval.candidates", { count, scores })
         ▼
-[retrieve.ts]  rerank() with MastraAgentRelevanceScorer  →  topK=5
+[retrieve.ts]  rerank() with cross-encoder scorer  →  topK=5
         │  log.info("retrieval.final", { ids, topScore })
         ▼
 [prompt.ts]   Build system prompt with numbered sources block
@@ -215,15 +215,18 @@ See [`api-contract.ts`](./api-contract.ts) for the full type definitions. Summar
 
 ### `Source` shape
 ```ts
-{
-  id: string;                   // Stable, e.g. "mastra-docs/rag/overview#chunk-3"
-  title: string;                // Human-readable, e.g. "Mastra RAG Overview"
-  url: string;                  // Canonical source URL
-  section?: string;             // H2/H3 if extractable
-  snippet: string;              // The retrieved chunk text, possibly truncated.
-  score: number;                // Cosine similarity, 0..1.
-  retrievedAt: string;          // ISO timestamp.
+interface Source {
+  id: SourceId;                  // Stable, e.g. "ai-act/article-3#chunk-0"
+  title: string;                 // Human-readable, e.g. "Article 3 — Definitions"
+  url: string;                   // Canonical source URL (EUR-Lex or mirror)
+  section?: string;              // H2/H3 if extractable
+  articleNumber?: string;        // Pinned at ingestion (e.g. "16" or "16(1)")
+  snippet: string;               // Truncated chunk text (~300 chars)
+  fullText: string;              // Identical to what the retriever saw
+  retrievedAt: string;           // ISO timestamp
 }
+// Note: retrieval score is NOT on the wire. Use DebugSource (which
+// extends Source with `score`) for server-internal logs only.
 ```
 
 ---
@@ -232,25 +235,26 @@ See [`api-contract.ts`](./api-contract.ts) for the full type definitions. Summar
 
 See [`data-sources.md`](./data-sources.md) for the full list. Summary:
 
-**Tier 1 — High signal (always ingest):**
-- `https://mastra.ai/docs` (landing) — for general framing.
-- `https://mastra.ai/docs/rag/overview` — the canonical RAG docs.
-- `https://mastra.ai/docs/rag/vector-databases` — vector store usage.
-- `https://mastra.ai/docs/rag/retrieval` — retrieval & reranking.
-- `https://mastra.ai/docs/agents/overview` — agent runtime.
-- `https://github.com/mastra-ai/mastra` README + top-level `packages/*/README.md`.
+**Tier 1 — Regulation text (always ingest):**
+- `https://artificialintelligenceact.eu/article/{N}/` for N = 1..113 — the 113 Articles.
+- `https://artificialintelligenceact.eu/recital/{N}/` for N = 1..180 — the 180 Recitals.
 
-**Tier 2 — Code-level signal (ingest on demand):**
-- Top 50 GitHub issues sorted by thumbs-up count.
-- Top 20 `*.md` files in `packages/rag/`, `packages/core/`, `packages/pg/`.
+**Tier 2 — Annexes (always ingest):**
+- `https://ai-act-service-desk.ec.europa.eu/en/ai-act/annex-{N}` for N = 1..13 — the 13 Annexes.
+
+**Tier 3 — Commission guidance (always ingest):**
+- DG CNECT "Navigating the AI Act" FAQ.
+- DG CNECT regulatory framework overview.
+- DG CNECT GPAI Code of Practice.
+- AI Act Service Desk landing page.
 
 **Ingestion pipeline** (`scripts/ingest.ts`):
-1. Fetch each URL via `fetch` + extract main content (use Mozilla Readability-style strip).
-2. For repo files: `git clone` to `/.cache/repo`, glob `.md` and `.ts` files under 50KB.
+1. Fetch each URL via `fetch` + extract main content (Mozilla Readability-style strip).
+2. Convert HTML to markdown, drop nav/footer.
 3. Chunk with `MDocument.fromText().chunk({ strategy: 'recursive', size: 1024, overlap: 128 })`.
 4. Embed in batches of 64 with Voyage.
 5. Upsert into `pgVector.upsert({ indexName, vectors, metadata })`.
-6. Store metadata: `{ sourceId, url, title, section, ingestedAt, chunkIndex }`.
+6. Store metadata: `{ sourceId, url, title, section, ingestedAt, chunkIndex, origin, canonical }`.
 
 **Idempotency**: Each chunk is keyed by `sha256(url + chunkIndex)`. Re-ingestion is a no-op.
 
@@ -258,33 +262,36 @@ See [`data-sources.md`](./data-sources.md) for the full list. Summary:
 
 ## 7. Evaluation Set
 
-20 Q&A pairs in `src/lib/data/fixtures.ts`, structured as:
+20 Q&A pairs in `evals/questions.json`, structured as:
 ```ts
 {
-  id: string;
-  category: 'factual' | 'howto' | 'code' | 'edge-case' | 'multi-doc';
+  id: string;                    // e.g. "q01"
+  category: string;              // see categories list below
+  difficulty: 'easy' | 'medium' | 'hard';
   question: string;
-  expectedSources: string[];       // Source IDs that should appear in top-5.
-  expectedAnswerContains: string[] // Substrings the final answer must include.
-  minScore: number;                // Min top-1 similarity, default 0.65.
-  notes?: string;                  // Why this case is interesting.
+  expectedSources: string[];     // Article / Recital / Annex URLs that should be cited
+  expectedTopics: Array<string | { aliases: string[] }>;  // substring the answer must mention; aliases cover UK/US spelling
+  expectedEnumCount?: number;    // if set, answer's list-item count must match within enumTolerance
+  enumTolerance?: number;        // default 1
 }
 ```
 
-**Categories (4 each):**
-- **Factual** — "What chunking strategies does Mastra support?"
-- **How-to** — "How do I add a custom embedding model to Mastra?"
-- **Code** — "Show me how to call PgVector.query with metadata filters."
-- **Edge-case** — "What happens if retrieval returns zero results?"
-- **Multi-doc** — "Compare Mastra and LangChain.js for RAG." (must cite both).
+**Categories (across 20 cases):** risk-classification, definitions, provider-obligations, deployer-obligations, high-risk-requirements, transparency, gpai, timeline, enforcement, conformity-assessment, post-market, gdpr-cross-ref.
 
-**Metrics computed by `scripts/eval.ts`:**
-- **Retrieval MRR** (mean reciprocal rank of first relevant source).
-- **Top-5 hit rate** (fraction where any expected source appears).
-- **Groundedness** (LLM-as-judge: does the answer reference its sources? rubric 0..3).
-- **Latency p50/p95** (retrieval ms, generation ms, total ms).
+**Example cases:**
+- "What are the four risk categories used by the EU AI Act?" (easy, risk-classification)
+- "What obligations apply to providers of high-risk AI?" (medium, provider-obligations)
+- "What are the conformity assessment procedures for high-risk AI systems under Article 43?" (hard, conformity-assessment)
 
-Run with: `npm run eval`. Output: a markdown report checked in next to fixtures.
+**Metrics computed by `evals/scorer.ts` (per case, raw 0..9, normalized 0..100):**
+- **Source accuracy** (0..3) — fraction of expected sources the answer cited, capped at 3.
+- **Topic coverage** (0..3) — fraction of expected topics the answer mentions, capped at 3.
+- **Citation quality** (0..2) — 2 if `[n]` markers are inline-attached to claims, 1 if citations exist without inline markers, 0 if none.
+- **Enum fidelity** (0..1) — 1 if `|answer - expectedEnumCount| <= enumTolerance`, else 0.
+
+Aggregate pass rate = % of cases scoring >= 6/9.
+
+Run with: `npm run eval`. Output: a markdown report in `evals/reports/`.
 
 ---
 
@@ -354,14 +361,14 @@ Validated at boot by `src/lib/env.ts` (Zod). Missing required var → fail fast 
 
 ```bash
 git clone <repo>
-cd mastra-expert
+cd eu-ai-act-expert
 npm install
 MOCK=1 npm run dev
 ```
 
 What happens:
 1. `VECTOR_BACKEND` defaults to `memory` because `POSTGRES_CONNECTION_STRING` is unset.
-2. `lib/vector/index.ts` returns the in-memory store pre-seeded from `src/lib/data/fixtures.ts` (the 20 eval Q&A, plus a few hand-written Mastra snippets so retrieval has something to find).
+2. `lib/vector/index.ts` returns the in-memory store pre-seeded from `src/lib/vector/fixtures.ts` (the 10 hand-written EU AI Act fixture Q&A so retrieval has something to find).
 3. The route handler detects `MOCK=1` and uses MSW handlers for Voyage + Anthropic. The Anthropic handler streams a canned response that includes inline citation markers and a final `data-source` part.
 4. The UI works end-to-end: type a question, see a streamed answer, see citations.
 
@@ -385,7 +392,7 @@ What happens:
    POSTGRES_CONNECTION_STRING=... VOYAGE_API_KEY=... npm run ingest
    ```
    (Run once locally pointed at the prod DB, or wrap in a one-off Vercel function.)
-5. **Smoke test**: Open the deployed URL, ask "How do I configure Mastra with pgvector?" — verify a cited answer streams.
+5. **Smoke test**: Open the deployed URL, ask "What does Article 6 say about high-risk classification?" — verify a cited answer streams.
 
 **Cost estimate (light traffic):** Supabase free tier covers a static site, Anthropic Sonnet ~$3/MTok input, Voyage ~$0.06/MTok. A 100-message demo session is well under $1.
 
@@ -393,16 +400,16 @@ What happens:
 
 ## 13. Stretch Goals (out of scope for v1)
 
-- Conversation memory (use Mastra's `MastraMemory` lib).
-- Re-ranking with Cohere as an A/B test.
+- Conversation memory (key-value store on `sessionId`, or upgrade to a vector memory lib).
+- Re-ranking with Cohere Rerank v3 as an A/B test against the current cross-encoder.
 - Streaming of source *titles* before full text so the citation panel populates progressively.
 - Public `/api/eval` endpoint for live eval scores.
-- A second chatbot (e.g. "Mastra vs LangChain") that uses two corpora.
+- Multi-language ingest (DE/FR/EU AI Act translations) with a language-aware embedder.
 
 ---
 
 ## 14. Open Questions
 
-- Should we expose `Mastra` agent loops alongside the simpler RAG pipeline, as a comparison? (Nice for portfolio; doubles the surface area.)
-- Voyage model dimension choice: stick with 1024 (default) for accuracy, or drop to 256 (1/4 storage) given our small corpus? **Defaulting to 1024** until evals say otherwise.
+- Should we add a multi-step retrieval (decompose the question, retrieve per sub-question, re-aggregate) for complex multi-Article queries? (Nice for portfolio; doubles the surface area.)
+- Voyage model dimension choice: stick with 1024 (default) for accuracy, or drop to 256 (1/4 storage) given our small corpus? **Defaulting to 1024** until evals say otherwise. Also: `voyage-law-2` is on the table as a more semantically accurate embedder for legal text — would need a fresh ingest to compare.
 

@@ -2,7 +2,7 @@
  * api-contract.ts
  * ----------------------------------------------------------------------------
  * Single source of truth for the shape of every payload that crosses the
- * network boundary in mastra-expert.
+ * network boundary in eu-ai-act-expert.
  *
  * Why this file exists (educational note):
  *   In a RAG app, three boundaries are easy to break with silent type drift:
@@ -52,7 +52,7 @@ export const asMessageId = (s: string): MessageId => s as MessageId;
  * a `[1]` chip in the assistant text to a card in the source list.
  */
 export interface Source {
-  /** Stable identifier, e.g. "mastra-docs/rag/overview#chunk-3". */
+  /** Stable identifier, e.g. "ai-act/article-3#chunk-0". */
   id: SourceId;
 
   /** Human-readable title shown in the source panel. */
@@ -63,6 +63,17 @@ export interface Source {
 
   /** Optional H2/H3 heading within the source, when extractable. */
   section?: string;
+
+  /**
+   * Top-level Article number (e.g. "16"), extracted from the chunk's
+   * metadata at ingestion time. Pinned separately from `section` so the
+   * UI can render the article number without re-parsing the title or id.
+   * Empty/undefined for non-Article sources (Recital, Annex, guidance).
+   *
+   * String (not number) to accommodate sub-paragraph forms like "16(1)"
+   * without a schema change.
+   */
+  articleNumber?: string;
 
   /**
    * The retrieved text. Truncated to ~300 chars for display, but the full
@@ -77,15 +88,33 @@ export interface Source {
    */
   fullText: string;
 
-  /**
-   * Cosine similarity between the query embedding and this chunk, 0..1.
-   * We rescale from raw pgvector distance (1 - distance) so consumers
-   * never have to think about distance vs similarity.
-   */
-  score: number;
+  // Note: retrieval-confidence score is intentionally NOT part of the user-
+  // facing wire shape. End users conflate cosine similarity with answer
+  // correctness, which is incorrect. Server-internal callers that need
+  // score for logging or debugging should use `DebugSource` (see below),
+  // which extends `Source` with the raw `score`. The SSE stream only ever
+  // ships `Source`, so a TypeScript reader cannot accidentally render it.
 
   /** When this chunk was retrieved (ISO 8601 UTC). */
   retrievedAt: string;
+}
+
+/**
+ * Server-only view of a `Source` that includes the raw retrieval score.
+ *
+ * Use this for server-side observability (e.g. log lines, eval runners)
+ * that legitimately need cosine similarity. Never include a `DebugSource`
+ * (or any object carrying `.score`) in a streamed `data-sources` payload —
+ * the UI is type-checked against `Source`, which has no `score` field, so
+ * any leak is a compile error rather than a silent bug.
+ *
+ * @internal Not part of the public API contract.
+ */
+export interface DebugSource extends Source {
+  /** Cosine similarity between the query embedding and this chunk, 0..1. */
+  score: number;
+  /** Optional chunk id (without the `#n` position suffix) for cross-referencing logs. */
+  chunkId?: string;
 }
 
 /**
@@ -196,16 +225,20 @@ export type CustomUIPart =
  * The UI may show a "Retrieved 5 sources in 142ms" hint when this part arrives.
  */
 export interface RetrievalMetadata {
-  /** Number of candidates pulled from the vector store before reranking. */
+  /** Number of candidates pulled from the vector store before per-article capping. */
   candidates: number;
-  /** Number of sources kept after reranking. */
+  /** Number of sources kept after per-article capping (≤ `candidates`). */
   finalCount: number;
   /** Top-1 cosine similarity, 0..1. */
   topScore: number;
-  /** Wall time spent in retrieval (embed + query + rerank), ms. */
+  /** Wall time spent in retrieval (embed + query + cap), ms. */
   latencyMs: number;
   /** Embedding model used, e.g. "voyage-code-3". */
   embeddingModel: string;
+  /** Number of distinct articles represented in `finalCount`. ≥1 when finalCount>0. */
+  uniqueSources: number;
+  /** Largest chunk count from any single article in `finalCount`. Equals the cap. */
+  maxPerArticle: number;
 }
 
 // ---------- Errors ----------------------------------------------------------

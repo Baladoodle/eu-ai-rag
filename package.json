@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
-    "ingest": "tsx scripts/ingest.ts",
+    "ingest": "node --env-file=.env.local --import tsx scripts/ingest.ts",
     "eval": "tsx evals/run.ts",
     "eval:mock": "tsx evals/run.ts --mock"
   },

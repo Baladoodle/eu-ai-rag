@@ -29,7 +29,7 @@ It does **not** cover: case law (post-application, not yet decided), national im
 
 3. **Idempotency**: chunks are keyed by `sha256(sourceId + chunkIndex)`. Re-ingesting the same content is a no-op.
 
-4. **Chunking strategy** (this differs from the generic Mastra corpus because legal text has natural boundaries):
+4. **Chunking strategy** (the EU AI Act corpus has natural structural boundaries that constrain the recursive splitter):
    - Each Article is one source document. Long Articles (>1024 tokens) are paragraph-chunked with overlap, but the first chunk is always the article heading.
    - Each Recital is one source document (recitals are short — usually 50-200 words each).
    - Each Annex is one source document. Annex III (the high-risk use case list) is item-chunked.

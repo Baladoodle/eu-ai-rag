@@ -113,7 +113,7 @@ function makeSessionId(): string {
  * survives chat switches. Chat switching happens via `loadMessages`,
  * not via a new SDK id.
  */
-const SDK_CHAT_ID = "mastra-expert-chat";
+const SDK_CHAT_ID = "eu-ai-act-expert-chat";
 
 export function useChatState(options: UseChatStateOptions = {}): UseChatStateResult {
   // Per-browser session id so backend logs can be correlated. Lazily
