@@ -75,7 +75,17 @@ describe("InMemoryWriter", () => {
   it("returns an empty summary for an empty batch", async () => {
     const writer = getInMemoryWriter();
     const sum = await writer.upsert([]);
-    expect(sum).toEqual({ written: 0, skipped: 0, attempted: 0, elapsedMs: 0 });
+    // Counters must all be zero. We don't assert `elapsedMs === 0` —
+    // Date.now() has ms granularity and the empty-batch fast path can
+    // legitimately read 0 or 1 ms depending on the scheduler. The
+    // contract is "no-op for an empty batch", not "instant".
+    expect(sum).toEqual({
+      written: 0,
+      skipped: 0,
+      attempted: 0,
+      elapsedMs: expect.any(Number),
+    });
+    expect(sum.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 });
 
