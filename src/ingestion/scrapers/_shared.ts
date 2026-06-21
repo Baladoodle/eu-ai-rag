@@ -50,20 +50,21 @@ export const turndown = new TurndownService({
 });
 
 /**
- * A polite User-Agent. Some sites (including mastra.ai) will 403 or 429
- * requests that don't identify themselves. We identify as the project
- * so the maintainers can reach out if our scraper is misbehaving.
+ * A polite User-Agent. Some sites (including the EUR-Lex / Commission
+ * mirrors we scrape) will 403 or 429 requests that don't identify
+ * themselves. We identify as the project so the maintainers can reach
+ * out if our scraper is misbehaving.
  */
-const USER_AGENT = "mastra-expert-ingest/0.1 (+https://github.com/mastra-ai/mastra-expert)";
+const USER_AGENT = "eu-ai-act-expert-ingest/0.1 (+https://github.com/eu-ai-act-expert)";
 
 /**
  * Fetch a URL and return the body as text, with automatic retries.
  *
- * Why retries: the public Mastra docs occasionally 502/503 during
- * deploys. We'd rather wait + retry than crash the whole ingest job.
- * Why exponential backoff: a thundering-herd of retries during a Mastra
- * deploy could make the outage worse. p-retry's defaults (5 attempts,
- * 1s..30s) are a sensible production setting.
+ * Why retries: the public EUR-Lex / Commission mirror pages occasionally
+ * 502/503 during deploys. We'd rather wait + retry than crash the whole
+ * ingest job. Why exponential backoff: a thundering-herd of retries during
+ * an outage could make it worse. p-retry's defaults (5 attempts, 1s..30s)
+ * are a sensible production setting.
  *
  * Why a User-Agent: some servers reject or rate-limit unidentified
  * clients harder than identified ones.
@@ -157,9 +158,8 @@ export function htmlToMarkdown(html: string, url: string): { markdown: string; t
 
 /**
  * Slugify a URL path so it can be used as a stable source-id component.
- *
- * Why: we want source ids like `mastra-docs/rag/overview` not
- * `mastra-docs/rag%2Foverview%2F`. Easier to read in logs and evals.
+ * Why: we want source ids like `ai-act/article-3` not
+ * `ai-act/article%2F3%2F`. Easier to read in logs and evals.
  */
 export function slugifyPath(pathname: string): string {
   return pathname

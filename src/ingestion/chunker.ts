@@ -127,7 +127,13 @@ export async function chunkDocument(doc: RawDocument): Promise<ChunkRecord[]> {
     metadata: {
       ...doc.metadata,
       ...stripUndef(c.metadata),
-      kind: doc.kind,
+      // Preserve the scraper-set kind discriminator ("article" |
+      // "recital" | "annex" | "guidance"). `doc.kind` is the
+      // ingestion-run kind ("docs" | "source" | "issue"), a coarser
+      // bucket; clobbering it here used to make inferSourceLabel in
+      // the prompt fall through to the page title because the chunk
+      // never carried an article-kind discriminator.
+      kind: doc.metadata?.kind ?? doc.kind,
       chunkStrategy: strategy,
       chunkIndex: i,
       totalChunks: chunks.length,
