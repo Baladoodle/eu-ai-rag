@@ -32,8 +32,35 @@
     },
     "expectedTopics": {
       "type": "array",
-      "items": { "type": "string" },
-      "minItems": 1
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["aliases"],
+            "properties": {
+              "aliases": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            }
+          }
+        ]
+      },
+      "minItems": 1,
+      "description": "Topics the answer must cover. Each entry is either a plain string (substring match against the answer) or an object with an `aliases` array — the answer matches if it contains ANY of the aliases as a substring. The object form covers UK/US spelling variants and pronoun substitutions."
+    },
+    "expectedEnumCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional. When set, the answer's list-item count must match this number within `enumTolerance`. Omit for non-enumeration questions."
+    },
+    "enumTolerance": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1,
+      "description": "Optional. Allowed |answer - expected| delta. Defaults to 1 (the scorer's `?? 1` fallback). Set 0 for an exact-match rubric."
     }
   }
 }

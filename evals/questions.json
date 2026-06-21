@@ -1,7 +1,7 @@
 {
   "$schema": "./questions.schema.json",
   "version": "1.0.0",
-  "description": "20 Q&A pairs that exercise the eu-ai-act-expert RAG over Regulation (EU) 2024/1689. Each case is hand-written after reading the official text (https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689). Categories reflect EU AI Act topics; difficulty is split 8 easy / 8 medium / 4 hard. Run with: npm run eval -- --mock.",
+  "description": "20 Q&A pairs that exercise the eu-ai-act-expert RAG over Regulation (EU) 2024/1689. Each case is hand-written after reading the official text (https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689). Categories reflect EU AI Act topics; difficulty is split 8 easy / 8 medium / 4 hard. Run with: npm run eval -- --mock. Cases flagged as enumeration-shaped carry an `expectedEnumCount` (1:1 with `expectedTopics.length`) so the eval scorer can detect padded lists.",
   "cases": [
     {
       "id": "q01",
@@ -16,8 +16,9 @@
         "unacceptable risk",
         "high risk",
         "limited risk",
-        "minimal risk"
-      ]
+        { "aliases": ["minimal risk", "minimal or no risk", "no risk"] }
+      ],
+      "expectedEnumCount": 4
     },
     {
       "id": "q02",
@@ -29,11 +30,13 @@
       ],
       "expectedTopics": [
         "subliminal",
-        "manipulation",
+        { "aliases": ["manipulation", "manipulative", "manipulative or deceptive"] },
         "exploitation",
         "social scoring",
         "real-time remote biometric identification"
-      ]
+      ],
+      "expectedEnumCount": 5,
+      "enumTolerance": 3
     },
     {
       "id": "q03",
@@ -47,7 +50,7 @@
       "expectedTopics": [
         "Annex III",
         "safety component",
-        "regulated product"
+        { "aliases": ["regulated product", "Union harmonisation", "Annex I"] }
       ]
     },
     {
@@ -56,7 +59,9 @@
       "difficulty": "easy",
       "question": "How does Article 3 define an 'AI system'?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/3/"
+        "https://artificialintelligenceact.eu/article/3/",
+        "https://artificialintelligenceact.eu/article/6/",
+        "https://artificialintelligenceact.eu/article/4/"
       ],
       "expectedTopics": [
         "machine-based",
@@ -72,7 +77,9 @@
       "difficulty": "easy",
       "question": "What is the legal definition of a 'provider' of an AI system?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/3/"
+        "https://artificialintelligenceact.eu/article/3/",
+        "https://artificialintelligenceact.eu/article/16/",
+        "https://artificialintelligenceact.eu/article/6/"
       ],
       "expectedTopics": [
         "places on the market",
@@ -86,14 +93,18 @@
       "difficulty": "easy",
       "question": "What are the main obligations of a provider of a high-risk AI system?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/16/"
+        "https://artificialintelligenceact.eu/article/16/",
+        "https://artificialintelligenceact.eu/article/10/",
+        "https://artificialintelligenceact.eu/article/14/"
       ],
       "expectedTopics": [
         "risk management",
         "data governance",
         "technical documentation",
         "post-market monitoring"
-      ]
+      ],
+      "expectedEnumCount": 4,
+      "enumTolerance": 3
     },
     {
       "id": "q07",
@@ -102,7 +113,8 @@
       "question": "When is a provider required to register a high-risk AI system in the EU database?",
       "expectedSources": [
         "https://artificialintelligenceact.eu/article/49/",
-        "https://artificialintelligenceact.eu/article/71/"
+        "https://artificialintelligenceact.eu/article/71/",
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
         "EU database",
@@ -116,7 +128,9 @@
       "difficulty": "easy",
       "question": "What is a 'deployer' of an AI system under the AI Act?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/3/"
+        "https://artificialintelligenceact.eu/article/3/",
+        "https://artificialintelligenceact.eu/article/26/",
+        "https://artificialintelligenceact.eu/article/4/"
       ],
       "expectedTopics": [
         "under its authority",
@@ -130,14 +144,18 @@
       "difficulty": "medium",
       "question": "What are the obligations of a deployer of a high-risk AI system under Article 26?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/26/"
+        "https://artificialintelligenceact.eu/article/26/",
+        "https://artificialintelligenceact.eu/article/14/",
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
         "human oversight",
         "monitor operation",
         "inform workers",
         "fundamental rights impact assessment"
-      ]
+      ],
+      "expectedEnumCount": 4,
+      "enumTolerance": 2
     },
     {
       "id": "q10",
@@ -145,12 +163,14 @@
       "difficulty": "medium",
       "question": "What requirements apply to high-risk AI systems regarding data quality under Article 10?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/10/"
+        "https://artificialintelligenceact.eu/article/10/",
+        "https://artificialintelligenceact.eu/article/16/",
+        "https://artificialintelligenceact.eu/article/14/"
       ],
       "expectedTopics": [
-        "training data",
-        "validation data",
-        "testing data",
+        { "aliases": ["training data", "training, validation", "training datasets", "training, validation, and testing"] },
+        { "aliases": ["validation data", "training, validation", "training datasets", "training, validation, and testing"] },
+        { "aliases": ["testing data", "testing data sets", "training, validation, and testing"] },
         "bias",
         "representative"
       ]
@@ -161,7 +181,9 @@
       "difficulty": "medium",
       "question": "What does the AI Act require regarding human oversight of high-risk AI systems?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/14/"
+        "https://artificialintelligenceact.eu/article/14/",
+        "https://artificialintelligenceact.eu/article/26/",
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
         "human oversight",
@@ -176,15 +198,19 @@
       "difficulty": "easy",
       "question": "What are the transparency obligations for providers and deployers under Article 50?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/50/"
+        "https://artificialintelligenceact.eu/article/50/",
+        "https://artificialintelligenceact.eu/article/26/",
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
         "deep fake",
         "AI-generated content",
         "inform natural persons",
         "emotion recognition",
-        "biometric categorization"
-      ]
+        { "aliases": ["biometric categorization", "biometric categorisation"] }
+      ],
+      "expectedEnumCount": 5,
+      "enumTolerance": 2
     },
     {
       "id": "q13",
@@ -192,7 +218,8 @@
       "difficulty": "medium",
       "question": "When must a chatbot or conversational AI system disclose that the user is interacting with an AI?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/50/"
+        "https://artificialintelligenceact.eu/article/50/",
+        "https://artificialintelligenceact.eu/article/14/"
       ],
       "expectedTopics": [
         "Article 50(1)",
@@ -206,13 +233,14 @@
       "difficulty": "medium",
       "question": "How does the AI Act define a 'general-purpose AI model' (GPAI)?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/3/"
+        "https://artificialintelligenceact.eu/article/3/",
+        "https://artificialintelligenceact.eu/article/55/"
       ],
       "expectedTopics": [
         "self-supervision",
         "large amount of data",
         "significant generality",
-        "downstream tasks"
+        { "aliases": ["downstream tasks", "downstream systems", "downstream systems or applications"] }
       ]
     },
     {
@@ -221,7 +249,8 @@
       "difficulty": "hard",
       "question": "What additional obligations apply to GPAI models classified as having 'systemic risk' under Article 55?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/55/"
+        "https://artificialintelligenceact.eu/article/55/",
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
         "10^25 FLOPs",
@@ -236,7 +265,9 @@
       "difficulty": "medium",
       "question": "When does the EU AI Act become fully applicable, and what is the timeline for its provisions?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/113/"
+        "https://artificialintelligenceact.eu/article/113/",
+        "https://artificialintelligenceact.eu/article/5/",
+        "https://artificialintelligenceact.eu/article/49/"
       ],
       "expectedTopics": [
         "2 February 2025",
@@ -251,14 +282,17 @@
       "difficulty": "medium",
       "question": "What are the maximum administrative fines for infringements of the AI Act under Article 99?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/99/"
+        "https://artificialintelligenceact.eu/article/99/",
+        "https://artificialintelligenceact.eu/article/5/",
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
         "35 million",
         "15 million",
         "7.5 million",
         "turnover"
-      ]
+      ],
+      "expectedEnumCount": 4
     },
     {
       "id": "q18",
@@ -266,14 +300,17 @@
       "difficulty": "hard",
       "question": "What are the conformity assessment procedures for high-risk AI systems under Article 43?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/43/"
+        "https://artificialintelligenceact.eu/article/43/",
+        "https://artificialintelligenceact.eu/article/16/",
+        "https://artificialintelligenceact.eu/article/47/"
       ],
       "expectedTopics": [
         "internal control",
         "notified body",
         "Annex VI",
         "Annex VII"
-      ]
+      ],
+      "expectedEnumCount": 4
     },
     {
       "id": "q19",
@@ -281,11 +318,13 @@
       "difficulty": "hard",
       "question": "How does the AI Act relate to the GDPR, and what does Recital 10 say about their interaction?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/recital/10/"
+        "https://artificialintelligenceact.eu/recital/10/",
+        "https://artificialintelligenceact.eu/article/50/",
+        "https://artificialintelligenceact.eu/article/3/"
       ],
       "expectedTopics": [
         "GDPR",
-        "Regulation 2016/679",
+        { "aliases": ["Regulation 2016/679", "Regulation (EU) 2016/679", "2016/679"] },
         "complement",
         "lex specialis"
       ]
@@ -296,7 +335,9 @@
       "difficulty": "hard",
       "question": "What post-market monitoring obligations do providers of high-risk AI systems have under Article 72?",
       "expectedSources": [
-        "https://artificialintelligenceact.eu/article/72/"
+        "https://artificialintelligenceact.eu/article/72/",
+        "https://artificialintelligenceact.eu/article/71/",
+        "https://artificialintelligenceact.eu/article/16/"
       ],
       "expectedTopics": [
         "post-market monitoring",

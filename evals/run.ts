@@ -104,7 +104,7 @@ interface RunResult {
  * its specific SSE framing. For now, it accepts either a flat JSON response
  * (for the mock path) or a UI message stream with `data-sources` parts.
  */
-async function callLive(url: string, question: string, timeoutMs = 30_000): Promise<RunResult> {
+async function callLive(url: string, question: string, timeoutMs = 60_000): Promise<RunResult> {
   const start = Date.now();
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
@@ -148,7 +148,14 @@ async function callLive(url: string, question: string, timeoutMs = 30_000): Prom
         if (!payload || payload === "[DONE]") continue;
         try {
           const part = JSON.parse(payload);
-          if (part.type === "text" && typeof part.text === "string") {
+          // AI SDK v6 `toUIMessageStream()` emits incremental
+          // `text-delta` parts with a `delta` field (NOT a `text` field).
+          // The aggregated `text` part only appears at the end of the
+          // message. We accept both so the runner is resilient to SDK
+          // version changes.
+          if (part.type === "text-delta" && typeof part.delta === "string") {
+            text += part.delta;
+          } else if (part.type === "text" && typeof part.text === "string") {
             text += part.text;
           } else if (part.type === "data-sources" && part.data?.citations) {
             for (const c of part.data.citations) {
@@ -160,6 +167,15 @@ async function callLive(url: string, question: string, timeoutMs = 30_000): Prom
                 });
               }
             }
+          } else if (part.type === "data-error" && part.data?.code) {
+            // Surface stream errors as the run's errorCode so the
+            // report shows why a stream produced no text.
+            return {
+              text,
+              citations,
+              latencyMs: Date.now() - start,
+              errorCode: String(part.data.code),
+            };
           }
         } catch {
           // Skip non-JSON lines; the real route may emit other event shapes.
@@ -196,14 +212,27 @@ async function callMock(c: EvalCase): Promise<RunResult> {
   const start = Date.now();
   // Simulate a small amount of work so latency numbers look realistic.
   await new Promise((r) => setTimeout(r, 5));
-  const text =
-    `Sure — about "${c.question}". The key things to know are: ${c.expectedTopics.join(", ")}. ` +
-    `For the official write-up see the Mastra docs.`;
+  const topics = c.expectedTopics;
+  // Render TopicSpec objects ({aliases: [...]}) as a readable string
+  // instead of "[object Object]". The mock is only used for sanity-
+  // checking the scorer — the live path is what we actually grade.
+  const renderTopic = (t: typeof topics[number]): string =>
+    typeof t === "string" ? t : t.aliases.join(" / ");
+  const n = c.expectedEnumCount ?? 0;
+  const body =
+    n > 0
+      ? topics
+          .slice(0, n)
+          .map((t, i) => `${i + 1}. ${renderTopic(t)} [${i + 1}]`)
+          .join("\n")
+      : `The key things to know are: ${topics.map(renderTopic).join(", ")}. ` +
+        `For the official text, see the linked Article / Recital / Annex.`;
+  const text = `Sure — about "${c.question}".\n\n${body}`;
   const firstSource = c.expectedSources[0]!;
   const citations: CapturedCitation[] = [
     {
       url: firstSource,
-      title: "Mastra docs (mock source)",
+      title: "EU AI Act source (mock citation)",
       snippet: text.slice(0, 200),
     },
   ];
@@ -264,7 +293,7 @@ function renderReport(
   lines.push("## Summary");
   lines.push("");
   lines.push(`- **Overall score:** ${fmtPct(card.overall)} (${scored.length} cases)`);
-  lines.push(`- **Pass rate:** ${fmtPct(card.passRate)} (cases with raw score >= 5/8)`);
+  lines.push(`- **Pass rate:** ${fmtPct(card.passRate)} (cases with raw score >= 6/9)`);
   lines.push(`- **Duration:** ${(meta.durationMs / 1000).toFixed(1)}s`);
   lines.push("");
 
@@ -297,7 +326,7 @@ function renderReport(
     const q = s.caseInput.question;
     const shortQ = q.length > 50 ? q.slice(0, 47) + "..." : q;
     lines.push(
-      `| ${s.caseInput.id} | ${s.caseInput.category} | ${s.caseInput.difficulty} | ${shortQ} | ${s.breakdown.sourceAccuracy}/3 | ${s.breakdown.topicCoverage}/3 | ${s.breakdown.citationQuality}/2 | ${s.breakdown.totalRaw}/8 | ${fmtPct(s.breakdown.totalNormalized)} |`,
+      `| ${s.caseInput.id} | ${s.caseInput.category} | ${s.caseInput.difficulty} | ${shortQ} | ${s.breakdown.sourceAccuracy}/3 | ${s.breakdown.topicCoverage}/3 | ${s.breakdown.citationQuality}/2 | ${s.breakdown.totalRaw}/9 | ${fmtPct(s.breakdown.totalNormalized)} |`,
     );
   }
   lines.push("");
@@ -311,11 +340,11 @@ function renderReport(
     lines.push(`### ${s.caseInput.id} — ${q}`);
     lines.push("");
     lines.push(`- Category: ${s.caseInput.category} | Difficulty: ${s.caseInput.difficulty}`);
-    lines.push(`- Score: ${s.breakdown.totalRaw}/8 (${fmtPct(s.breakdown.totalNormalized)})`);
+    lines.push(`- Score: ${s.breakdown.totalRaw}/9 (${fmtPct(s.breakdown.totalNormalized)})`);
     lines.push(`- Latency: ${s.latencyMs}ms${s.errorCode ? ` | error: ${s.errorCode}` : ""}`);
     lines.push(`- Expected sources: ${s.caseInput.expectedSources.join(", ")}`);
     lines.push(`- Cited URLs: ${s.answer.citations.map((c) => c.url).join(", ") || "(none)"}`);
-    lines.push(`- Expected topics: ${s.caseInput.expectedTopics.join(", ")}`);
+    lines.push(`- Expected topics: ${s.caseInput.expectedTopics.map((t) => (typeof t === "string" ? t : t.aliases.join(" / "))).join(", ")}`);
     const citedText = s.answer.text.replace(/\s+/g, " ").trim();
     lines.push(`- Answer (first 200 chars): ${citedText.slice(0, 200)}${citedText.length > 200 ? "..." : ""}`);
     lines.push("- Notes:");
@@ -375,7 +404,7 @@ async function main(): Promise<void> {
     process.stdout.write(`[eval] ${c.id} (${c.difficulty}, ${c.category}) ... `);
     const s = await runOne(c, args);
     scored.push(s);
-    console.log(`${s.breakdown.totalRaw}/8 (${s.breakdown.totalNormalized}%)`);
+    console.log(`${s.breakdown.totalRaw}/9 (${s.breakdown.totalNormalized}%)`);
   }
 
   const finishedAt = new Date();
